@@ -1,0 +1,701 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover">
+<title>汪汪快跑 · Puppy Dash</title>
+<style>
+  :root {
+    --bg: #eaf6d8; --panel: #fffdf4; --line: #cfe3b0; --text: #2f3b1f; --dim: #748560;
+    --me: #f08a24; --foe: #e5534b; --gold: #c9820a; --ok: #b7c4a0; --green: #4caf50; --deep: #2e7d32;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body {
+    background: linear-gradient(#bfe6ff, #eaf6d8 45%, #d6eeb4) fixed;
+    color: var(--text);
+    font-family: -apple-system, "PingFang SC", "Microsoft YaHei", "Segoe UI", sans-serif;
+    display: flex; justify-content: center; padding: 20px 16px;
+  }
+  .wrap { width: 100%; max-width: 980px; }
+  h1 { margin: 6px 0 2px; font-size: 34px; letter-spacing: 2px; color: var(--deep); }
+  h1 small { font-size: 14px; color: var(--dim); font-weight: 400; margin-left: 10px; letter-spacing: 1px; }
+  .sub { color: var(--dim); margin: 0 0 18px; }
+  .hidden { display: none !important; }
+
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px; box-shadow: 0 6px 20px #6b8f3a22; }
+  .group { margin-bottom: 18px; }
+  .group > label { display: block; color: var(--dim); font-size: 13px; margin-bottom: 8px; letter-spacing: 1px; }
+  .chips { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .chip {
+    background: #f6fbe9; border: 1.5px solid var(--line); color: var(--text); border-radius: 14px;
+    padding: 12px 14px; text-align: left; cursor: pointer; font: inherit; transition: .12s;
+  }
+  .chip:hover { border-color: #9cc76a; }
+  .chip b { display: block; font-size: 16px; margin-bottom: 3px; }
+  .chip span { color: var(--dim); font-size: 12.5px; line-height: 1.45; display: block; }
+  .chip.on { border-color: var(--green); background: #e6f6cf; box-shadow: 0 0 0 3px #4caf5026; }
+  .chip.on b { color: var(--deep); }
+  .custom { margin-top: 12px; display: flex; align-items: center; gap: 12px; color: var(--dim); font-size: 14px; }
+  .custom input { flex: 1; accent-color: var(--green); }
+  .custom output { color: var(--gold); font-weight: 700; min-width: 76px; text-align: right; }
+  .row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+  .btn {
+    background: var(--green); color: #fff; border: 0; border-radius: 14px; padding: 13px 30px;
+    font: inherit; font-weight: 800; font-size: 17px; cursor: pointer; letter-spacing: 2px; box-shadow: 0 3px 0 #388e3c;
+  }
+  .btn:hover { filter: brightness(1.06); }
+  .btn.ghost { background: #fff; color: var(--text); border: 1.5px solid var(--line); font-weight: 600; box-shadow: none; }
+  .hint { color: var(--dim); font-size: 13px; }
+  .best { color: var(--gold); font-size: 13px; font-weight: 600; }
+
+  .hud { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 10px; }
+  .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; }
+  .stat i { font-style: normal; color: var(--dim); font-size: 12px; display: block; }
+  .stat b { font-size: 22px; font-variant-numeric: tabular-nums; }
+  canvas { width: 100%; height: 340px; display: block; border-radius: 16px; border: 1px solid var(--line); background: #bfe6ff; }
+  .mini { position: relative; height: 10px; background: #e1eecb; border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; }
+  .mini s { position: absolute; top: -4px; width: 16px; height: 16px; border-radius: 50%; margin-left: -8px; border: 2px solid #fff; }
+  #mMe { background: var(--me); z-index: 2; } #mFoe { background: var(--foe); }
+  .mini em { position: absolute; right: -4px; top: -9px; font-style: normal; font-size: 18px; }
+  #text {
+    position: relative; background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+    padding: 16px 20px; height: 150px; overflow: hidden;
+    font: 24px/1.75 "SF Mono", Menlo, Consolas, "Courier New", monospace; white-space: pre-wrap; color: #3b4a2a;
+  }
+  #text span.done { color: var(--ok); }
+  #text span.cur { background: #ffd45e; color: var(--text); border-radius: 3px; }
+  #text span.cur.err { background: var(--foe); color: #fff; animation: shake .18s; }
+  @keyframes shake { 25% { transform: translateX(-3px);} 75% { transform: translateX(3px);} }
+  .bar { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; min-height: 22px; }
+  #ime { color: var(--gold); font-size: 14px; font-weight: 600; }
+
+  #result { position: fixed; inset: 0; z-index: 10; background: #3c502873; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  #result .panel { width: 100%; max-width: 460px; text-align: center; padding: 28px; }
+  #rTitle { font-size: 30px; margin: 0 0 4px; }
+  #rTitle.win { color: var(--deep); } #rTitle.lose { color: var(--foe); }
+  .rgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin: 20px 0; }
+  .stage { position: relative; }
+  #kb { position: fixed; top: 0; left: 0; width: 1px; height: 1px; opacity: 0; border: 0; padding: 0; font-size: 16px; pointer-events: none; }
+  #quitBtn {
+    position: absolute; top: 8px; right: 8px; width: 34px; height: 34px; border-radius: 50%; display: none;
+    border: 1.5px solid var(--line); background: #fffdf4dd; color: var(--dim); font-size: 15px; cursor: pointer;
+  }
+  #tap {
+    position: absolute; left: 50%; bottom: 10px; transform: translateX(-50%); white-space: nowrap;
+    background: #fffdf4ee; border: 1.5px solid var(--line); border-radius: 20px; padding: 6px 14px; font-size: 14px; font-weight: 600;
+  }
+  button, .chip { touch-action: manipulation; -webkit-tap-highlight-color: transparent; }
+
+  /* 触屏设备：游戏界面铺满键盘上方的可见区域 */
+  body.touch #game:not(.hidden) {
+    position: fixed; left: 0; right: 0; top: 0; z-index: 5; display: flex; flex-direction: column; gap: 6px;
+    padding: 6px max(8px, env(safe-area-inset-right)) 6px max(8px, env(safe-area-inset-left));
+    background: linear-gradient(#bfe6ff, #eaf6d8);
+  }
+  body.touch .hud { grid-template-columns: repeat(4, 1fr); gap: 6px; margin: 0; }
+  body.touch .stat { padding: 4px 8px; border-radius: 10px; }
+  body.touch .stat i { font-size: 10px; } body.touch .stat b { font-size: 16px; }
+  body.touch .stage { flex: 1; min-height: 0; }
+  body.touch canvas { height: 100%; }
+  body.touch .mini, body.touch .bar { display: none; }
+  body.touch #text { flex: none; height: 102px; font-size: 18px; line-height: 1.6; padding: 8px 12px; border-radius: 12px; }
+  body.touch #quitBtn { display: block; }
+  @media (max-width: 600px) { body { padding: 14px 12px; } .panel { padding: 14px; } .btn { padding: 12px 24px; } .hud { grid-template-columns: repeat(2, 1fr); } #text { font-size: 19px; } h1 { font-size: 26px; } }
+</style>
+</head>
+<body>
+<input id="kb" type="text" inputmode="text" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" aria-label="打字输入">
+<div class="wrap">
+
+  <!-- 菜单 -->
+  <section id="menu">
+    <h1>🐶 汪汪快跑<small>PUPPY DASH</small></h1>
+    <p class="sub">在林间环道上输入整句英文，让小狗跑起来 —— 打得越快，跑得越快。</p>
+    <div class="panel">
+      <div class="group">
+        <label>模式</label>
+        <div class="chips" id="modes"></div>
+      </div>
+      <div class="group">
+        <label>难度</label>
+        <div class="chips" id="diffs"></div>
+        <div class="custom hidden" id="customRow">
+          <span>对手速度</span>
+          <input type="range" id="customWpm" min="10" max="120" step="5" value="40">
+          <output id="customOut">40 WPM</output>
+        </div>
+      </div>
+      <div class="row">
+        <button class="btn" id="startBtn">开始</button>
+        <button class="btn ghost" id="soundBtn">音效：开</button>
+        <span class="best" id="bestLine"></span>
+      </div>
+      <p class="hint" style="margin:14px 0 0">请先切换到英文输入法。打错时对手会趁机前冲，按 Esc（手机上点右上角 ✕）可随时返回菜单。</p>
+    </div>
+  </section>
+
+  <!-- 游戏 -->
+  <section id="game" class="hidden">
+    <div class="hud">
+      <div class="stat"><i>速度 WPM</i><b id="sWpm">0</b></div>
+      <div class="stat"><i>准确率</i><b id="sAcc">100%</b></div>
+      <div class="stat"><i>用时</i><b id="sTime">0.0s</b></div>
+      <div class="stat"><i id="sGapLabel">距离</i><b id="sGap">0</b></div>
+    </div>
+    <div class="stage">
+      <canvas id="cv"></canvas>
+      <button id="quitBtn" aria-label="退出">✕</button>
+      <div id="tap" class="hidden">👆 点一下屏幕唤出键盘</div>
+    </div>
+    <div class="mini"><s id="mFoe"></s><s id="mMe"></s><em id="mGoal">🏁</em></div>
+    <div id="text"></div>
+    <div class="bar"><span id="ime"></span><span class="hint" id="modeLine"></span></div>
+  </section>
+
+  <!-- 结算 -->
+  <div id="result" class="hidden">
+    <div class="panel">
+      <h2 id="rTitle"></h2>
+      <div class="hint" id="rSub"></div>
+      <div class="rgrid">
+        <div class="stat"><i>速度 WPM</i><b id="rWpm"></b></div>
+        <div class="stat"><i>准确率</i><b id="rAcc"></b></div>
+        <div class="stat"><i>用时</i><b id="rTime"></b></div>
+        <div class="stat"><i>错误</i><b id="rErr"></b></div>
+      </div>
+      <div class="best" id="rBest" style="margin-bottom:16px"></div>
+      <div class="row" style="justify-content:center">
+        <button class="btn" id="retryBtn">再来一局</button>
+        <button class="btn ghost" id="menuBtn">返回菜单</button>
+      </div>
+      <p class="hint" style="margin:12px 0 0">Enter 再来一局 · Esc 返回菜单</p>
+    </div>
+  </div>
+</div>
+
+<script>
+'use strict';
+/* ---------- 配置 ---------- */
+const MODES = {
+  chase:  { name: '追击', desc: '松鼠叼走了小狗的骨头，在它钻进树洞之前追上它。', speedMul: 1 },
+  escape: { name: '逃脱', desc: '不小心惹到了大鹅！在被它追上之前跑回小窝。', speedMul: 1.15 },
+};
+const DIFFS = {
+  easy:   { name: '简单', wpm: 15, penalty: 0, caseFree: true,  tier: 'easy',   desc: '对手 15 WPM · 短句 · 不区分大小写 · 打错无惩罚' },
+  normal: { name: '普通', wpm: 30, penalty: 1, caseFree: false, tier: 'normal', desc: '对手 30 WPM · 完整段落 · 打错对手前冲 1 格' },
+  hard:   { name: '困难', wpm: 50, penalty: 2, caseFree: false, tier: 'hard',   desc: '对手 50 WPM · 含数字与符号 · 打错对手前冲 2 格' },
+  hell:   { name: '地狱', wpm: 75, penalty: 3, caseFree: false, tier: 'hard',   desc: '对手 75 WPM · 含数字与符号 · 打错对手前冲 3 格' },
+  custom: { name: '自定义', wpm: 40, penalty: 1, caseFree: false, tier: 'normal', desc: '自己设定对手速度（10–120 WPM）' },
+};
+const TEXTS = {
+  easy: [
+    'The sun is up and the road is clear. A small red car rolls down the hill. Keep your hands on the keys and your eyes on the line.',
+    'I like to type a little every day. Slow and steady is fine at first. Soon the words will come fast and you will not look down.',
+    'A cat sat by the door and looked at the rain. The tea was hot and the room was warm. It was a good day to stay in and read.',
+    'We ran to the top of the hill to see the kites. The wind was strong and the sky was blue. My kite went so high it looked like a dot.',
+  ],
+  normal: [
+    'Every morning the ferry leaves the harbor at seven, carrying bread, letters, and sleepy travelers across the bay. The captain knows each wave by heart, yet she still watches the water as if seeing it for the first time.',
+    'Learning to type well is a lot like learning to ride a bike. At first you wobble and stare at your hands, but with patient practice your fingers find their own way, and one day you notice that you are simply thinking in words.',
+    'The old library at the end of the street smells of dust and oranges. Nobody is sure why. Children say a gardener once hid a whole orchard between the shelves, and that the books have been dreaming of summer ever since.',
+    'When the power went out, the whole building grew quiet. Neighbors who had never spoken carried candles into the hallway, shared soup from a single pot, and told stories until the lights flickered back on, a little too soon.',
+  ],
+  hard: [
+    'At 6:45 a.m. the control tower logged its 3rd warning: "Cargo drone #27 is 400 meters off course; wind speed is 38 km/h & rising." Nobody panicked. The pilot typed 12 quick commands, hit Enter, and the drone swung back in under 9 seconds.',
+    'Recipe for a long night: 2 cups of coffee, 1 stubborn bug, and 0 comments in the code. By 3:15 a.m. I had tried 14 fixes (none worked); by 4:00 I found it - a single missing semicolon on line 208. Cost: $0. Lesson: priceless.',
+    '"Why hurry?" asked the tortoise. "Because," said the hare, checking his watch, "the race starts at 9:30, the track is 4.2 km long, and I\'ve bet 50% of my carrots on it!" The tortoise smiled, yawned, and started walking at exactly 0.3 km/h.',
+    'Flight QZ-816 to Port Ember (gate B7) is delayed by 95 minutes; passengers in rows 1-30 may claim a $15 meal voucher at desk #4. "Is that all?" someone asked. "No," the agent replied, "there\'s also free Wi-Fi: password Sky*2048."',
+  ],
+};
+
+/* ---------- 工具 ---------- */
+const $ = id => document.getElementById(id);
+const kb = $('kb');
+const IME_WARN = '⚠ 检测到中文输入法，请切换到英文输入';
+let isTouch = false;
+function detectTouch() {
+  isTouch = matchMedia('(pointer: coarse)').matches || (navigator.maxTouchPoints > 0 && Math.min(innerWidth, innerHeight) < 700);
+  document.body.classList.toggle('touch', isTouch);
+}
+detectTouch();
+const store = {
+  get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch { return null; } },
+  set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch {} },
+};
+const hash = n => { const x = Math.sin(n * 127.1 + 311.7) * 43758.5453; return x - Math.floor(x); };
+
+/* ---------- 音效 ---------- */
+let actx = null, soundOn = store.get('kc_sound') !== false;
+function beep(freq, dur, type = 'sine', vol = 0.05, slide = 0) {
+  if (!soundOn) return;
+  try {
+    actx = actx || new (window.AudioContext || window.webkitAudioContext)();
+    const o = actx.createOscillator(), g = actx.createGain(), t = actx.currentTime;
+    o.type = type; o.frequency.setValueAtTime(freq, t);
+    if (slide) o.frequency.exponentialRampToValueAtTime(freq * slide, t + dur);
+    g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+    o.connect(g).connect(actx.destination); o.start(t); o.stop(t + dur);
+  } catch {}
+}
+
+/* ---------- 菜单 ---------- */
+let mode = store.get('kc_mode') || 'chase';
+let diff = store.get('kc_diff') || 'normal';
+if (!MODES[mode]) mode = 'chase';
+if (!DIFFS[diff]) diff = 'normal';
+DIFFS.custom.wpm = store.get('kc_custom') || 40;
+
+function buildChips(box, defs, cur, onPick) {
+  box.innerHTML = '';
+  for (const k in defs) {
+    const b = document.createElement('button');
+    b.className = 'chip' + (k === cur ? ' on' : '');
+    b.innerHTML = `<b>${defs[k].name}</b><span>${defs[k].desc}</span>`;
+    b.onclick = () => onPick(k);
+    box.appendChild(b);
+  }
+}
+const bestKey = () => `kc_best_${mode}_${diff}`;
+function renderMenu() {
+  buildChips($('modes'), MODES, mode, k => { mode = k; store.set('kc_mode', k); renderMenu(); });
+  buildChips($('diffs'), DIFFS, diff, k => { diff = k; store.set('kc_diff', k); renderMenu(); });
+  $('customRow').classList.toggle('hidden', diff !== 'custom');
+  $('customWpm').value = DIFFS.custom.wpm;
+  $('customOut').textContent = DIFFS.custom.wpm + ' WPM';
+  $('soundBtn').textContent = '音效：' + (soundOn ? '开' : '关');
+  const best = diff === 'custom' ? null : store.get(bestKey());
+  $('bestLine').textContent = best ? `本模式最佳：${best} WPM` : '';
+}
+$('customWpm').oninput = e => {
+  DIFFS.custom.wpm = +e.target.value; store.set('kc_custom', DIFFS.custom.wpm);
+  $('customOut').textContent = DIFFS.custom.wpm + ' WPM';
+};
+$('soundBtn').onclick = () => { soundOn = !soundOn; store.set('kc_sound', soundOn); renderMenu(); };
+$('startBtn').onclick = startGame;
+$('retryBtn').onclick = startGame;
+$('menuBtn').onclick = toMenu;
+
+/* ---------- 游戏状态 ---------- */
+const cv = $('cv'), ctx = cv.getContext('2d');
+let g = null, phase = 'menu', lastText = '', raf = 0, lastT = 0;
+let spans = [];
+
+function show(id) {
+  for (const s of ['menu', 'game']) $(s).classList.toggle('hidden', s !== id);
+  $('result').classList.add('hidden');
+}
+function toMenu() { phase = 'menu'; cancelAnimationFrame(raf); kb.blur(); show('menu'); fit(); tapHint(); renderMenu(); }
+
+function startGame() {
+  const d = DIFFS[diff], pool = TEXTS[d.tier];
+  let text; do { text = pool[Math.floor(Math.random() * pool.length)]; } while (pool.length > 1 && text === lastText);
+  lastText = text;
+  const L = text.length, head = Math.max(20, Math.min(45, Math.round(L * 0.12)));
+  g = {
+    text, L, head, d,
+    idx: 0, errors: 0, time: 0, cd: 2.4,
+    foeSpeed: d.wpm * 5 / 60 * MODES[mode].speedMul,
+    foe: mode === 'chase' ? head : 0,
+    base: mode === 'chase' ? 0 : head,          // 玩家起点
+    goal: mode === 'chase' ? L : head + L,
+    laps: 0, lapLen: 0,
+    drawMe: mode === 'chase' ? 0 : head, drawFoe: mode === 'chase' ? head : 0,
+    boost: 0, shake: 0, surge: 0, won: null,
+  };
+  g.laps = Math.max(2, Math.round(g.goal / 70)); g.lapLen = g.goal / g.laps;   // 终点恰好落在起点线
+  // 文本
+  const box = $('text'); box.innerHTML = ''; box.scrollTop = 0;
+  spans = [...text].map(c => { const s = document.createElement('span'); s.textContent = c; box.appendChild(s); return s; });
+  spans[0].className = 'cur';
+  $('ime').textContent = '';
+  $('sGapLabel').textContent = mode === 'chase' ? '距目标' : '领先';
+  $('mGoal').textContent = mode === 'chase' ? '🌳' : '🏠';
+  $('modeLine').textContent = `${MODES[mode].name} · ${d.name} · 对手 ${d.wpm} WPM · 共 ${g.laps} 圈`;
+  detectTouch(); show('game'); document.activeElement && document.activeElement.blur();
+  phase = 'countdown'; kbReset(); kb.focus({ preventScroll: true });       // 必须在点击手势内聚焦，手机才会弹出键盘
+  if (soundOn) { try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume(); } catch {} }
+  fit(); tapHint();
+  resize(); phase = 'countdown'; lastT = performance.now();
+  cancelAnimationFrame(raf); raf = requestAnimationFrame(loop);
+  updateHud();
+}
+
+const mePos = () => g.base + g.idx;
+function wpm() { return g.time > 0.5 ? Math.round(g.idx / 5 / (g.time / 60)) : 0; }
+function acc() { const n = g.idx + g.errors; return n ? Math.round(g.idx / n * 100) : 100; }
+
+function updateHud() {
+  $('sWpm').textContent = wpm();
+  $('sAcc').textContent = acc() + '%';
+  $('sTime').textContent = g.time.toFixed(1) + 's';
+  const gap = mode === 'chase' ? g.foe - mePos() : mePos() - g.foe;
+  $('sGap').textContent = Math.max(0, gap).toFixed(0) + ' 格';
+  $('mMe').style.left = Math.min(100, mePos() / g.goal * 100) + '%';
+  $('mFoe').style.left = Math.min(100, g.foe / g.goal * 100) + '%';
+}
+
+function checkEnd() {
+  if (phase !== 'play') return;
+  if (mode === 'chase') {
+    if (mePos() >= g.foe) return finish(true);
+    if (g.foe >= g.goal) return finish(false);
+  } else {
+    if (g.idx >= g.L) return finish(true);
+    if (g.foe >= mePos()) return finish(false);
+  }
+}
+
+function finish(won) {
+  phase = 'over'; g.won = won; kb.blur(); tapHint();
+  if (won) { beep(523, .12, 'triangle', .07); setTimeout(() => beep(784, .25, 'triangle', .07), 120); }
+  else beep(220, .5, 'sawtooth', .05, 0.4);
+  const msg = {
+    chase:  [['追上了！', '骨头抢回来啦'], ['让它跑了', '松鼠钻进了树洞']],
+    escape: [['安全到家！', '小狗跑回了小窝'], ['被追上了', '大鹅啄到了小狗的屁股']],
+  }[mode][won ? 0 : 1];
+  $('rTitle').textContent = msg[0]; $('rTitle').className = won ? 'win' : 'lose';
+  $('rSub').textContent = `${msg[1]} · ${MODES[mode].name} / ${g.d.name}`;
+  $('rWpm').textContent = wpm(); $('rAcc').textContent = acc() + '%';
+  $('rTime').textContent = g.time.toFixed(1) + 's'; $('rErr').textContent = g.errors;
+  let bestMsg = '';
+  if (won && diff !== 'custom') {
+    const old = store.get(bestKey()) || 0;
+    if (wpm() > old) { store.set(bestKey(), wpm()); bestMsg = `🏆 新纪录：${wpm()} WPM`; }
+    else if (old) bestMsg = `最佳纪录：${old} WPM`;
+  } else if (!won) {
+    bestMsg = `对手速度 ${g.d.wpm} WPM —— ` + (mode === 'chase' ? '需要比它更快才能追上' : '保持节奏、少出错');
+  }
+  $('rBest').textContent = bestMsg;
+  setTimeout(() => { if (phase === 'over') $('result').classList.remove('hidden'); }, 700);
+}
+
+/* ---------- 输入 ---------- */
+document.addEventListener('keydown', e => {
+  if (phase === 'menu') { if (e.key === 'Enter') { e.preventDefault(); startGame(); } return; }
+  if (e.key === 'Escape') { e.preventDefault(); return toMenu(); }
+  if (phase === 'over') {
+    if (e.key === 'Enter' && !$('result').classList.contains('hidden')) { e.preventDefault(); startGame(); }
+    return;
+  }
+  if (e.isComposing || e.key === 'Process' || e.key === 'Unidentified' || e.keyCode === 229) {
+    if (document.activeElement !== kb) $('ime').textContent = IME_WARN;
+    return;                                             // 软键盘 / 输入法：交给下面的 input 事件
+  }
+  if (e.ctrlKey || e.metaKey || e.altKey || e.key.length !== 1) return;
+  e.preventDefault(); typeChar(e.key);
+});
+
+function typeChar(ch) {
+  if (phase !== 'play') return;
+  $('ime').textContent = '';
+  const want = g.text[g.idx];
+  const ok = g.d.caseFree ? ch.toLowerCase() === want.toLowerCase() : ch === want;
+  const cur = spans[g.idx];
+  if (ok) {
+    cur.className = 'done'; g.idx++; g.boost = Math.min(1, g.boost + 0.22);
+    beep(660 + Math.random() * 60, .04, 'square', .02);
+    const next = spans[g.idx];
+    if (next) {
+      next.className = 'cur';
+      const box = $('text'); box.scrollTop = Math.max(0, next.offsetTop - (box.clientHeight - next.offsetHeight) / 2);
+    }
+  } else {
+    g.errors++; g.foe += g.d.penalty; g.shake = 1; if (g.d.penalty) g.surge = 1;
+    cur.className = 'cur'; void cur.offsetWidth; cur.className = 'cur err';
+    beep(150, .12, 'sawtooth', .05);
+  }
+  checkEnd(); updateHud();
+}
+
+// 手机软键盘：字符从隐藏输入框的 input 事件里取（软键盘的 keydown 不带具体按键）
+const SMART = { '‘': "'", '’': "'", '“': '"', '”': '"', '—': '-', '–': '-', '…': '.', '\u3000': ' ', '\u00a0': ' ' };
+let kbPrev = '', composing = false;
+function kbReset() { kb.value = ''; kbPrev = ''; }
+kb.addEventListener('compositionstart', () => { composing = true; });
+kb.addEventListener('compositionend', () => { composing = false; });
+kb.addEventListener('input', () => {
+  const v = kb.value;
+  let added = '';
+  if (v.startsWith(kbPrev)) added = v.slice(kbPrev.length);
+  else if (v.length > kbPrev.length) added = v.slice(-1);       // 被自动更正整词替换时，只认最后一个字符
+  kbPrev = v;
+  for (const raw of added) {
+    const ch = SMART[raw] || raw;
+    if (ch === '\n') continue;
+    if (ch.charCodeAt(0) > 126) { $('ime').textContent = IME_WARN; continue; }
+    typeChar(ch);
+  }
+  if (!composing && v.length > 30) kbReset();
+});
+function tapHint() {
+  $('tap').classList.toggle('hidden', !(isTouch && (phase === 'countdown' || phase === 'play') && document.activeElement !== kb));
+}
+kb.addEventListener('focus', tapHint); kb.addEventListener('blur', () => setTimeout(tapHint, 100));
+$('game').addEventListener('click', () => { if (phase === 'countdown' || phase === 'play') kb.focus({ preventScroll: true }); });
+$('quitBtn').addEventListener('click', e => { e.stopPropagation(); toMenu(); });
+
+// 触屏：让游戏界面正好填满键盘上方的可见区域
+function fit() {
+  const gm = $('game'), vv = window.visualViewport;
+  if (!isTouch || phase === 'menu') { gm.style.height = gm.style.top = ''; return; }
+  gm.style.height = (vv ? vv.height : innerHeight) + 'px';
+  gm.style.top = (vv ? vv.offsetTop : 0) + 'px';
+}
+if (window.visualViewport) { visualViewport.addEventListener('resize', fit); visualViewport.addEventListener('scroll', fit); }
+window.addEventListener('resize', fit);
+
+/* ---------- 主循环 ---------- */
+function loop(t) {
+  raf = requestAnimationFrame(loop);
+  const dt = Math.max(0, Math.min(0.05, (t - lastT) / 1000)); lastT = t;
+  if (phase === 'countdown') {
+    const before = Math.ceil(g.cd / 0.8); g.cd -= dt;
+    const after = Math.ceil(g.cd / 0.8);
+    if (after !== before) beep(after > 0 ? 440 : 880, .12, 'triangle', .06);
+    if (g.cd <= 0) phase = 'play';
+  } else if (phase === 'play') {
+    g.time += dt;
+    g.foe += g.foeSpeed * (1 + 0.12 * Math.sin(g.time * 0.9)) * dt;
+    checkEnd(); updateHud();
+  }
+  const k = 1 - Math.exp(-10 * dt);
+  g.drawMe += (mePos() - g.drawMe) * k;
+  g.drawFoe += (g.foe - g.drawFoe) * k;
+  g.boost *= Math.exp(-2.5 * dt); g.shake *= Math.exp(-9 * dt); g.surge *= Math.exp(-3 * dt);
+  draw(t / 1000);
+}
+
+/* ---------- 绘制（林间环道） ---------- */
+let W = 0, H = 0, R = null, lastDraw = 0;
+const K = 0.62;                                                         // 赛道纵向压缩
+function resize() {
+  const dpr = window.devicePixelRatio || 1;
+  W = cv.clientWidth; H = cv.clientHeight;
+  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  const rx = Math.min(W * 0.43, 410), ry = Math.min(rx * 0.36, H * 0.3);
+  const cx = W / 2, cy = H * 0.57, tw = Math.max(13, Math.min(20, rx * 0.06));
+  R = { cx, cy, rx, ry, tw, hy: cy - ry - tw * K - 20, u: Math.max(0.55, Math.min(1, rx / 300)) };
+  R.pond = { x: cx - rx * 0.05, y: cy - ry * 0.05, rx: rx * 0.2, ry: ry * 0.22 };
+  R.trees = [];
+  for (let i = 0; i < 60 && R.trees.length < 14; i++) {
+    const x = cx + (hash(i + 5) - 0.5) * 2 * (rx - tw) * 0.85, y = cy + (hash(i + 40) - 0.5) * 2 * (ry - tw * K) * 0.8;
+    const inRing = ((x - cx) / (rx - tw)) ** 2 + ((y - cy) / (ry - tw * K)) ** 2 < 0.62;
+    const inPond = ((x - R.pond.x) / (R.pond.rx * 1.35)) ** 2 + ((y - 8 - R.pond.y) / (R.pond.ry * 1.6)) ** 2 < 1;
+    const nearHome = Math.abs(x - cx) < 60 && y > cy + ry * 0.25;
+    if (inRing && !inPond && !nearHome) R.trees.push({ x, y, s: 0.75 + hash(i + 9) * 0.55, pine: hash(i + 3) > 0.6, i });
+  }
+  R.trees.sort((a, b) => a.y - b.y);
+  R.back = []; for (let x = -10, i = 0; x < W + 20; x += 44, i++) R.back.push({ x: x + hash(i + 2) * 20, y: R.hy + 4 + hash(i + 70) * 10, s: 0.7 + hash(i + 11) * 0.4, pine: hash(i + 31) > 0.5, i: i + 100 });
+  R.flowers = Array.from({ length: 60 }, (_, i) => ({ x: hash(i + 200) * W, y: R.hy + 14 + hash(i + 300) * (H - R.hy - 18), c: ['#fff', '#ffd1e8', '#fff3a0'][i % 3] }));
+}
+window.addEventListener('resize', () => { if (phase !== 'menu') resize(); });
+
+// 赛道位置（字符数）→ 屏幕坐标。0 在最靠近镜头的起点，沿近侧向右、绕远侧返回
+function pt(pos) {
+  const a = pos / g.lapLen * Math.PI * 2, s = Math.sin(a), c = Math.cos(a);
+  return { x: R.cx + R.rx * s, y: R.cy + R.ry * c, sc: 0.62 + 0.19 * (c + 1), dx: R.rx * c, dy: -R.ry * s, near: c >= 0 };
+}
+const circ = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); };
+const oval = (x, y, a, b, col, rot = 0) => { ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x, y, a, b, rot, 0, 7); ctx.fill(); };
+function label(txt, x, y, col, font = '700 14px sans-serif', align = 'center') {
+  ctx.font = font; ctx.textAlign = align; ctx.lineJoin = 'round';
+  ctx.strokeStyle = '#fffdf4'; ctx.lineWidth = 4; ctx.strokeText(txt, x, y);
+  ctx.fillStyle = col; ctx.fillText(txt, x, y);
+}
+function legs(xs, ph, amp, len, col, lw) {
+  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
+  xs.forEach((x, i) => {
+    const a = ph + i * Math.PI;
+    ctx.beginPath(); ctx.moveTo(x, -len); ctx.lineTo(x + Math.sin(a) * len * 0.75 * amp, -Math.max(0, Math.cos(a)) * 3 * amp); ctx.stroke();
+  });
+}
+
+function drawTree(x, y, s, pine, sway) {
+  oval(x, y, 13 * s, 4 * s, '#0000001f');
+  ctx.fillStyle = '#8d5a2b'; ctx.fillRect(x - 3 * s, y - 16 * s, 6 * s, 16 * s);
+  if (pine) {
+    for (let j = 0; j < 3; j++) {
+      const by = y - 11 * s - j * 12 * s, hw = (16 - j * 4) * s;
+      ctx.fillStyle = ['#2f9e5b', '#37ab66', '#43b972'][j];
+      ctx.beginPath(); ctx.moveTo(x - hw, by); ctx.lineTo(x + sway * (j + 1) * 0.5, by - 19 * s); ctx.lineTo(x + hw, by); ctx.fill();
+    }
+  } else {
+    circ(x - 9 * s, y - 24 * s, 11 * s, '#43a047'); circ(x + 9 * s, y - 24 * s, 11 * s, '#5dbb63');
+    circ(x + sway, y - 31 * s, 15 * s, '#4caf50'); circ(x - 4 * s + sway, y - 36 * s, 6 * s, '#7ed67f');
+  }
+}
+
+// 以下角色都以脚底为原点、面朝右
+function drawPuppy(ph, amp, t) {
+  ctx.translate(0, -Math.abs(Math.sin(ph)) * 2.5 * amp);
+  legs([-9, 11], ph + Math.PI / 2, amp, 11, '#d6862a', 4.5);                // 远侧腿
+  ctx.strokeStyle = '#f2a541'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';  // 摇尾巴
+  ctx.beginPath(); ctx.moveTo(-15, -20); ctx.quadraticCurveTo(-22, -24, -23 + Math.sin(t * 16) * 3, -32); ctx.stroke();
+  oval(0, -17, 17, 10, '#f2a541'); oval(2, -12.5, 11, 5, '#ffe6b8');
+  legs([-12, 8], ph, amp, 11, '#f2a541', 4.5);                              // 近侧腿
+  ctx.strokeStyle = '#e5534b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(11, -25); ctx.lineTo(14, -17); ctx.stroke();  // 项圈
+  circ(18, -28, 9.5, '#f2a541'); oval(26, -25, 6, 4.5, '#ffe6b8');
+  circ(31, -26.5, 2.2, '#3b2a1a'); circ(20.5, -30.5, 1.7, '#3b2a1a');
+  if (amp > 0.3) oval(26, -19.5, 2.2, 3.6 + Math.sin(ph * 2), '#ff8fa3');   // 吐舌头
+  oval(11.5, -27, 4.2, 8.5, '#b5651d', 0.35 + Math.sin(ph) * 0.3 * amp);    // 垂耳
+}
+
+function drawSquirrel(ph, amp, t) {
+  ctx.translate(0, -Math.abs(Math.sin(ph)) * 5 * amp);
+  oval(-13, -22, 7.5, 13, '#b5651d', -0.35 + Math.sin(ph) * 0.12); oval(-13.5, -23, 4, 9, '#d99555', -0.35);  // 大尾巴
+  legs([-5, 6], ph, amp, 6, '#a85f2a', 3.5);
+  oval(0, -11, 10, 7.5, '#c9773a'); oval(2, -8, 6, 3.6, '#f6dcb8');
+  ctx.fillStyle = '#c9773a'; ctx.beginPath(); ctx.moveTo(6, -22); ctx.lineTo(8, -28); ctx.lineTo(11, -22); ctx.fill();   // 耳朵
+  circ(10, -17, 6.2, '#c9773a'); circ(15.5, -16, 1.4, '#3b2a1a'); circ(11.5, -19, 1.4, '#3b2a1a');
+  ctx.strokeStyle = '#b9a58a'; ctx.lineWidth = 5; ctx.lineCap = 'round';    // 叼着的骨头
+  ctx.beginPath(); ctx.moveTo(15, -12.5); ctx.lineTo(25, -12.5); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+  for (const [bx, by] of [[14, -14.5], [14, -10.5], [26, -14.5], [26, -10.5]]) circ(bx, by, 2.3, '#fff');
+}
+
+function drawGoose(ph, amp, t, angry) {
+  ctx.translate(0, -Math.abs(Math.sin(ph)) * 2 * amp);
+  legs([-3, 5], ph, amp, 10, '#f08a24', 3);
+  ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-14, -20); ctx.lineTo(-25, -27); ctx.lineTo(-13, -12); ctx.fill(); ctx.stroke();  // 尾羽
+  ctx.lineCap = 'round'; ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 9.5; ctx.beginPath(); ctx.moveTo(10, -21); ctx.lineTo(19, -39); ctx.stroke();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.stroke();                // 长脖子
+  ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 1.5;
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, -18, 16, 11, 0, 0, 7); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#eef2f6'; ctx.beginPath(); ctx.ellipse(-3, -20, 11, 6, -0.3 + Math.sin(ph) * 0.55 * amp, 0, 7); ctx.fill(); ctx.stroke();  // 扑翅膀
+  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(20, -41, 5.8, 0, 7); ctx.fill(); ctx.stroke();
+  const open = 1.5 + (amp ? Math.abs(Math.sin(t * 10)) * 2.5 : 0) + angry * 2;                                           // 嘎嘎叫
+  ctx.fillStyle = '#f08a24';
+  ctx.beginPath(); ctx.moveTo(24, -44); ctx.lineTo(34, -41 - open); ctx.lineTo(25, -40); ctx.fill();
+  ctx.beginPath(); ctx.moveTo(25, -40); ctx.lineTo(33, -39 + open); ctx.lineTo(24, -37.5); ctx.fill();
+  circ(21.5, -42.5, 1.5, '#2f3b1f');
+  ctx.strokeStyle = '#2f3b1f'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(18.5, -46.5); ctx.lineTo(24, -44.5); ctx.stroke();   // 凶凶的眉毛
+}
+
+function drawHome(x, by, hot, t) {
+  if (mode === 'chase') {                                                   // 松鼠的树洞
+    ctx.fillStyle = '#8d5a2b'; ctx.fillRect(x - 20, by - 44, 40, 44);
+    ctx.beginPath(); ctx.moveTo(x - 20, by); ctx.lineTo(x - 30, by + 3); ctx.lineTo(x - 20, by - 12); ctx.moveTo(x + 20, by); ctx.lineTo(x + 30, by + 3); ctx.lineTo(x + 20, by - 12); ctx.fill();
+    ctx.fillStyle = '#7a4a20'; ctx.fillRect(x - 20, by - 44, 6, 44);
+    circ(x - 20, by - 50, 17, '#43a047'); circ(x + 20, by - 50, 17, '#5dbb63'); circ(x, by - 60, 22, '#4caf50'); circ(x - 7, by - 68, 8, '#7ed67f');
+    oval(x + 2, by - 17, 10, 14, hot ? '#ffe27a' : '#3b2412');
+    if (hot) oval(x + 2, by - 17, 6, 9, '#fff6c8');
+  } else {                                                                  // 小狗的小窝
+    ctx.fillStyle = '#fff1cf'; ctx.strokeStyle = '#d9b87a'; ctx.lineWidth = 2;
+    ctx.fillRect(x - 22, by - 30, 44, 30); ctx.strokeRect(x - 22, by - 30, 44, 30);
+    ctx.fillStyle = '#e5534b'; ctx.beginPath(); ctx.moveTo(x - 29, by - 29); ctx.lineTo(x, by - 54); ctx.lineTo(x + 29, by - 29); ctx.fill();
+    ctx.fillStyle = hot ? '#ffe27a' : '#5a3a1c'; ctx.beginPath(); ctx.arc(x, by - 13, 9, Math.PI, 0); ctx.lineTo(x + 9, by); ctx.lineTo(x - 9, by); ctx.fill();
+  }
+  const ly = by - (mode === 'chase' ? 90 : 62) - (hot ? Math.abs(Math.sin(t * 5)) * 4 : 0);
+  label(hot ? (mode === 'chase' ? '树洞开了！' : '快回小窝！') : '起点', x, ly, hot ? '#e5534b' : '#748560');
+}
+
+function draw(t) {
+  if (cv.clientWidth !== W || cv.clientHeight !== H) resize();
+  if (W < 120 || H < 70) return;                                       // 画布尚未布局
+  const dt = Math.max(0, Math.min(0.05, t - lastDraw)); lastDraw = t;
+  const { cx, cy, rx, ry, tw, hy } = R, sway = Math.sin(t * 1.3) * 1.5;
+  const running = phase === 'play';
+  g.runMe = (g.runMe || 0) + dt * (6 + 18 * g.boost);
+  g.runFoe = (g.runFoe || 0) + dt * (running ? (mode === 'chase' ? 17 : 13) : 0);
+
+  ctx.save();
+  if (g.shake > 0.02) ctx.translate((Math.random() - .5) * 8 * g.shake, (Math.random() - .5) * 6 * g.shake);
+
+  // 天空、太阳、云
+  const sky = ctx.createLinearGradient(0, 0, 0, hy);
+  sky.addColorStop(0, '#7cc8ff'); sky.addColorStop(1, '#e3f6ff');
+  ctx.fillStyle = sky; ctx.fillRect(-10, -10, W + 20, hy + 20);
+  const sx = W - 78, sy = 44;
+  const glow = ctx.createRadialGradient(sx, sy, 10, sx, sy, 90);
+  glow.addColorStop(0, '#fff6b0cc'); glow.addColorStop(1, '#fff6b000');
+  ctx.fillStyle = glow; ctx.fillRect(sx - 90, sy - 90, 180, 180);
+  ctx.strokeStyle = '#ffd95a99'; ctx.lineWidth = 4; ctx.lineCap = 'round';
+  for (let i = 0; i < 12; i++) {
+    const a = i * Math.PI / 6 + t * 0.25;
+    ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * 33, sy + Math.sin(a) * 33); ctx.lineTo(sx + Math.cos(a) * 44, sy + Math.sin(a) * 44); ctx.stroke();
+  }
+  circ(sx, sy, 26, '#ffd95a'); circ(sx - 6, sy - 6, 14, '#ffe98a');
+  for (let i = 0; i < 3; i++) {
+    const x = ((i * 370 + 60 + t * (7 + i * 3)) % (W + 240)) - 120, y = 26 + i * 17, s = 0.8 + i * 0.2;
+    ctx.globalAlpha = 0.92;
+    circ(x, y, 14 * s, '#fff'); circ(x + 16 * s, y - 6 * s, 17 * s, '#fff'); circ(x + 34 * s, y, 13 * s, '#fff'); oval(x + 17 * s, y + 6 * s, 30 * s, 8 * s, '#fff');
+    ctx.globalAlpha = 1;
+  }
+
+  // 远山与草地
+  for (const [off, amp, col] of [[26, 16, '#8fd27a'], [10, 10, '#9bdc74']]) {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-10, hy + 10);
+    for (let x = -10; x <= W + 10; x += 20) ctx.lineTo(x, hy - off - amp * Math.sin(x * 0.009 + off));
+    ctx.lineTo(W + 10, hy + 10); ctx.fill();
+  }
+  const grass = ctx.createLinearGradient(0, hy, 0, H);
+  grass.addColorStop(0, '#a6de6e'); grass.addColorStop(1, '#84cb52');
+  ctx.fillStyle = grass; ctx.fillRect(-10, hy, W + 20, H - hy + 10);
+  for (const f of R.flowers) { circ(f.x, f.y, 2.2, f.c); circ(f.x, f.y, 0.9, '#f5b301'); }
+  for (const b of R.back) drawTree(b.x, b.y, b.s * R.u, b.pine, sway);
+
+  // 泥土环道
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx + tw, ry + tw * K, 0, 0, 7); ctx.ellipse(cx, cy, rx - tw, ry - tw * K, 0, 0, 7);
+  ctx.fillStyle = '#e6c48c'; ctx.fill('evenodd');
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx - tw, ry - tw * K, 0, 0, 7); ctx.fillStyle = '#b4e47c'; ctx.fill();
+  ctx.lineWidth = 2.5; ctx.strokeStyle = '#c99a5b'; ctx.stroke();
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx + tw, ry + tw * K, 0, 0, 7); ctx.stroke();
+  ctx.setLineDash([10, 16]); ctx.strokeStyle = '#f6e2bb'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
+  for (let i = 0; i < 4; i++) {                                         // 起点线
+    ctx.fillStyle = i % 2 ? '#fff' : '#8d5a2b';
+    ctx.fillRect(cx - 4, cy + ry - tw * K + i * tw * K / 2, 8, tw * K / 2);
+  }
+  // 池塘
+  const p = R.pond;
+  oval(p.x, p.y + 2, p.rx + 4, p.ry + 3, '#8fcf5a'); oval(p.x, p.y, p.rx, p.ry, '#7fd3f2');
+  oval(p.x - p.rx * 0.3, p.y - p.ry * 0.3, p.rx * 0.35, p.ry * 0.2, '#c9f0ff');
+  oval(p.x + p.rx * 0.4, p.y + p.ry * 0.3, 7, 3.5, '#5dbb63');
+
+  const ent = e => {
+    const q = e.p, s = q.sc * 1.15 * Math.max(0.72, R.u);
+    oval(q.x, q.y, 20 * q.sc, 5 * q.sc, '#00000030');
+    if (e.me) for (let i = 1; i <= 5 && g.boost > 0.15; i++) {          // 扬起的尘土
+      const d = pt(g.drawMe - 2 - i * 1.3);
+      circ(d.x, d.y - (2 + i * 1.5) * d.sc, (2 + i * 0.9) * d.sc, `rgba(255,246,222,${g.boost * (1 - i / 6) * 0.8})`);
+    }
+    ctx.save(); ctx.translate(q.x, q.y);
+    ctx.scale(q.dx < 0 ? -1 : 1, 1); ctx.rotate(Math.atan2(q.dy, Math.abs(q.dx)) * 0.35); ctx.scale(s, s);
+    if (e.me) drawPuppy(g.runMe, Math.min(1, g.boost * 4), t);
+    else if (mode === 'chase') drawSquirrel(g.runFoe, running ? 1 : 0, t);
+    else drawGoose(g.runFoe, running ? 1 : 0, t, g.surge);
+    ctx.restore();
+    if (!e.me && g.surge > 0.3) label('!', q.x, q.y - 62 * q.sc, '#e5534b', '900 22px sans-serif');
+  };
+  const ents = [{ p: pt(g.drawMe), me: true }, { p: pt(g.drawFoe), me: false }].sort((a, b) => a.p.y - b.p.y);
+
+  ents.filter(e => !e.p.near).forEach(ent);                             // 远侧 → 会被内场的树挡住
+  for (const tr of R.trees) drawTree(tr.x, tr.y, R.u * tr.s * (0.8 + 0.3 * (tr.y - cy + ry) / (2 * ry)), tr.pine, sway);
+
+  // 终点：最后一圈才开启
+  const hot = (mode === 'chase' ? g.foe : mePos()) >= g.goal - g.lapLen;
+  const hu = Math.max(0.62, R.u);
+  ctx.save(); ctx.translate(cx, cy + ry - tw * K - 4); ctx.scale(hu, hu); drawHome(0, 0, hot, t); ctx.restore();
+
+  ents.filter(e => e.p.near).forEach(ent);                              // 近侧
+
+  // 圈数
+  const lap = Math.min(g.laps, Math.floor(mePos() / g.lapLen) + 1);
+  label(`第 ${lap} / ${g.laps} 圈`, 16, 30, '#2e7d32', '700 17px sans-serif', 'left');
+  if (hot && running) label('最后一圈！', 16, 52, '#e5534b', '700 14px sans-serif', 'left');
+  ctx.restore();
+
+  // 倒计时
+  if (phase === 'countdown') {
+    ctx.fillStyle = '#ffffff8c'; ctx.fillRect(0, 0, W, H);
+    label(Math.ceil(g.cd / 0.8), W / 2, H / 2 + 20, '#2e7d32', '800 84px sans-serif');
+    label(MODES[mode].desc, W / 2, H / 2 + 60, '#4b5a35', (W < 500 ? 12 : 15) + 'px sans-serif');
+  }
+}
+
+renderMenu();
+</script>
+</body>
+</html>

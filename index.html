@@ -53,7 +53,19 @@
   .stat { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 8px 14px; }
   .stat i { font-style: normal; color: var(--dim); font-size: 12px; display: block; }
   .stat b { font-size: 22px; font-variant-numeric: tabular-nums; }
-  canvas { width: 100%; height: 340px; display: block; border-radius: 16px; border: 1px solid var(--line); background: #bfe6ff; }
+  #cv { width: 100%; height: 420px; display: block; border-radius: 16px; border: 1px solid var(--line); background: #bfe6ff; }
+  #map {
+    position: absolute; left: 10px; top: 10px; width: 176px; height: 126px; border-radius: 12px; pointer-events: none;
+    border: 2px solid #fffdf4; background: #a9dc72e6; box-shadow: 0 2px 10px #0000002e;
+  }
+  #lapTag {
+    position: absolute; top: 10px; left: 50%; transform: translateX(-50%); white-space: nowrap; pointer-events: none;
+    background: #fffdf4e0; border: 1.5px solid var(--line); border-radius: 20px; padding: 4px 14px; font-size: 15px; font-weight: 700; color: var(--deep);
+  }
+  #lapTag.hot { color: var(--foe); }
+  #cd { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 4px; pointer-events: none; }
+  #cdNum { font-size: 96px; line-height: 1; font-weight: 800; color: var(--deep); text-shadow: 0 0 4px #fffdf4, 0 0 14px #fffdf4, 0 4px 0 #fffdf4; }
+  #cdDesc { background: #fffdf4e0; border-radius: 20px; padding: 5px 16px; font-size: 15px; color: #4b5a35; max-width: 90%; text-align: center; }
   .mini { position: relative; height: 10px; background: #e1eecb; border: 1px solid var(--line); border-radius: 6px; margin: 12px 0; }
   .mini s { position: absolute; top: -4px; width: 16px; height: 16px; border-radius: 50%; margin-left: -8px; border: 2px solid #fff; }
   #mMe { background: var(--me); z-index: 2; } #mFoe { background: var(--foe); }
@@ -97,7 +109,10 @@
   body.touch .stat { padding: 4px 8px; border-radius: 10px; }
   body.touch .stat i { font-size: 10px; } body.touch .stat b { font-size: 16px; }
   body.touch .stage { flex: 1; min-height: 0; }
-  body.touch canvas { height: 100%; }
+  body.touch #cv { height: 100%; }
+  body.touch #map { width: 112px; height: 80px; left: 6px; top: 6px; border-radius: 9px; }
+  body.touch #lapTag { top: 6px; font-size: 12px; padding: 2px 10px; }
+  body.touch #cdNum { font-size: 64px; } body.touch #cdDesc { font-size: 12px; }
   body.touch .mini, body.touch .bar { display: none; }
   body.touch #text { flex: none; height: 102px; font-size: 18px; line-height: 1.6; padding: 8px 12px; border-radius: 12px; }
   body.touch #quitBtn { display: block; }
@@ -132,6 +147,7 @@
         <span class="best" id="bestLine"></span>
       </div>
       <p class="hint" style="margin:14px 0 0">请先切换到英文输入法。打错时对手会趁机前冲，按 Esc（手机上点右上角 ✕）可随时返回菜单。</p>
+      <p class="hint" id="err3d" style="margin:8px 0 0;color:var(--foe)"></p>
     </div>
   </section>
 
@@ -145,6 +161,9 @@
     </div>
     <div class="stage">
       <canvas id="cv"></canvas>
+      <canvas id="map" aria-label="小地图"></canvas>
+      <div id="lapTag"></div>
+      <div id="cd" class="hidden"><div id="cdNum"></div><div id="cdDesc"></div></div>
       <button id="quitBtn" aria-label="退出">✕</button>
       <div id="tap" class="hidden">👆 点一下屏幕唤出键盘</div>
     </div>
@@ -174,6 +193,8 @@
   </div>
 </div>
 
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"
+  onerror="this.onerror=null;var s=document.createElement('script');s.src='https://unpkg.com/three@0.160.0/build/three.min.js';document.head.appendChild(s)"></script>
 <script>
 'use strict';
 /* ---------- 配置 ---------- */
@@ -277,7 +298,7 @@ $('retryBtn').onclick = startGame;
 $('menuBtn').onclick = toMenu;
 
 /* ---------- 游戏状态 ---------- */
-const cv = $('cv'), ctx = cv.getContext('2d');
+const cv = $('cv');
 let g = null, phase = 'menu', lastText = '', raf = 0, lastT = 0;
 let spans = [];
 
@@ -288,6 +309,7 @@ function show(id) {
 function toMenu() { phase = 'menu'; cancelAnimationFrame(raf); kb.blur(); show('menu'); fit(); tapHint(); renderMenu(); }
 
 function startGame() {
+  if (!ensure3D()) return;
   const d = DIFFS[diff], pool = TEXTS[d.tier];
   let text; do { text = pool[Math.floor(Math.random() * pool.length)]; } while (pool.length > 1 && text === lastText);
   lastText = text;
@@ -466,232 +488,405 @@ function loop(t) {
   draw(t / 1000);
 }
 
-/* ---------- 绘制（林间环道） ---------- */
-let W = 0, H = 0, R = null, lastDraw = 0;
-const K = 0.62;                                                         // 赛道纵向压缩
-function resize() {
-  const dpr = window.devicePixelRatio || 1;
-  W = cv.clientWidth; H = cv.clientHeight;
-  cv.width = W * dpr; cv.height = H * dpr; ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  const rx = Math.min(W * 0.43, 410), ry = Math.min(rx * 0.36, H * 0.3);
-  const cx = W / 2, cy = H * 0.57, tw = Math.max(13, Math.min(20, rx * 0.06));
-  R = { cx, cy, rx, ry, tw, hy: cy - ry - tw * K - 20, u: Math.max(0.55, Math.min(1, rx / 300)) };
-  R.pond = { x: cx - rx * 0.05, y: cy - ry * 0.05, rx: rx * 0.2, ry: ry * 0.22 };
-  R.trees = [];
-  for (let i = 0; i < 60 && R.trees.length < 14; i++) {
-    const x = cx + (hash(i + 5) - 0.5) * 2 * (rx - tw) * 0.85, y = cy + (hash(i + 40) - 0.5) * 2 * (ry - tw * K) * 0.8;
-    const inRing = ((x - cx) / (rx - tw)) ** 2 + ((y - cy) / (ry - tw * K)) ** 2 < 0.62;
-    const inPond = ((x - R.pond.x) / (R.pond.rx * 1.35)) ** 2 + ((y - 8 - R.pond.y) / (R.pond.ry * 1.6)) ** 2 < 1;
-    const nearHome = Math.abs(x - cx) < 60 && y > cy + ry * 0.25;
-    if (inRing && !inPond && !nearHome) R.trees.push({ x, y, s: 0.75 + hash(i + 9) * 0.55, pine: hash(i + 3) > 0.6, i });
+/* ---------- 3D 场景（three.js · 林间环道） ---------- */
+let W = 0, H = 0, T3 = null, lastDraw = 0;
+const TRACK_W = 2.7;                                                    // 赛道半宽
+const CTRL = [[0, 30], [26, 29], [44, 20], [48, 4], [38, -10], [22, -14], [10, -24], [-8, -30], [-28, -26], [-44, -14], [-46, 4], [-36, 16], [-22, 25]];
+const POND = { x: 2, z: 3, rx: 9, rz: 6.5 };
+const smooth = x => x * x * (3 - 2 * x);
+
+function ensure3D() {
+  if (T3) return true;
+  try {
+    if (!window.THREE) throw new Error('three.js 未加载');
+    T3 = init3D();
+    return true;
+  } catch (err) {
+    console.error(err);
+    $('err3d').textContent = '⚠ 3D 场景初始化失败：' + err.message + '（需要联网加载 three.js，并且浏览器支持 WebGL）';
+    return false;
   }
-  R.trees.sort((a, b) => a.y - b.y);
-  R.back = []; for (let x = -10, i = 0; x < W + 20; x += 44, i++) R.back.push({ x: x + hash(i + 2) * 20, y: R.hy + 4 + hash(i + 70) * 10, s: 0.7 + hash(i + 11) * 0.4, pine: hash(i + 31) > 0.5, i: i + 100 });
-  R.flowers = Array.from({ length: 60 }, (_, i) => ({ x: hash(i + 200) * W, y: R.hy + 14 + hash(i + 300) * (H - R.hy - 18), c: ['#fff', '#ffd1e8', '#fff3a0'][i % 3] }));
+}
+
+function init3D() {
+  const renderer = new THREE.WebGLRenderer({ canvas: cv, antialias: true });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  const scene = new THREE.Scene();
+  scene.fog = new THREE.Fog(0xdff4ff, 80, 330);
+  const camera = new THREE.PerspectiveCamera(55, 1, 0.3, 1200);
+
+  const mats = {};
+  const M = c => (mats[c] = mats[c] || new THREE.MeshLambertMaterial({ color: c }));
+  const SPH = new THREE.SphereGeometry(1, 18, 14), CYL = new THREE.CylinderGeometry(1, 1, 1, 12);
+  const CONE = new THREE.ConeGeometry(1, 1, 12), BOX = new THREE.BoxGeometry(1, 1, 1);
+  const add = (parent, geo, col, x, y, z, sx = 1, sy = sx, sz = sx) => {
+    const m = new THREE.Mesh(geo, typeof col === 'number' ? M(col) : col);
+    m.position.set(x, y, z); m.scale.set(sx, sy, sz); m.castShadow = true; parent.add(m); return m;
+  };
+  const grp = (parent, x = 0, y = 0, z = 0) => { const o = new THREE.Group(); o.position.set(x, y, z); parent.add(o); return o; };
+  const decal = (c, layer) => new THREE.MeshLambertMaterial({ color: c, polygonOffset: true, polygonOffsetFactor: -layer, polygonOffsetUnits: -layer });
+
+  /* 光照、天空 */
+  scene.add(new THREE.HemisphereLight(0xeaf7ff, 0x8fcf5a, 1.9));
+  const sun = new THREE.DirectionalLight(0xfff1cc, 2.4);
+  sun.position.set(60, 60, -70); sun.castShadow = true;
+  const S = isTouch ? 1024 : 2048; sun.shadow.mapSize.set(S, S);
+  Object.assign(sun.shadow.camera, { left: -85, right: 85, top: 85, bottom: -85, near: 10, far: 280 });
+  sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.06;
+  scene.add(sun);
+  const skyGeo = new THREE.SphereGeometry(700, 24, 12), skyCol = [], cTop = new THREE.Color(0x5db6ff), cHor = new THREE.Color(0xdff4ff), cTmp = new THREE.Color();
+  for (let i = 0, sp = skyGeo.attributes.position; i < sp.count; i++) {
+    cTmp.lerpColors(cHor, cTop, Math.max(0, Math.min(1, sp.getY(i) / 700 * 1.7))); skyCol.push(cTmp.r, cTmp.g, cTmp.b);
+  }
+  skyGeo.setAttribute('color', new THREE.Float32BufferAttribute(skyCol, 3));
+  scene.add(new THREE.Mesh(skyGeo, new THREE.MeshBasicMaterial({ vertexColors: true, side: THREE.BackSide, fog: false, depthWrite: false })));
+  const sunBall = new THREE.Mesh(SPH, new THREE.MeshBasicMaterial({ color: 0xffe27a, fog: false }));
+  sunBall.position.copy(sun.position).multiplyScalar(5); sunBall.scale.setScalar(26); scene.add(sunBall);
+  const clouds = [];
+  for (let i = 0; i < 9; i++) {
+    const c = grp(scene, (hash(i + 1) - 0.5) * 520, 62 + hash(i + 21) * 30, (hash(i + 41) - 0.5) * 420), s = 5 + hash(i + 61) * 4;
+    const cm = new THREE.MeshLambertMaterial({ color: 0xffffff, fog: false });
+    [[0, 0, 0, 1], [1.2, 0.35, 0.2, 1.25], [2.5, 0, -0.1, 0.95], [1.3, -0.3, 0.5, 1.1]].forEach(([x, y, z, r]) => { add(c, SPH, cm, x * s, y * s, z * s, r * s, r * s * 0.7, r * s).castShadow = false; });
+    clouds.push(c);
+  }
+
+  /* 草地、远山 */
+  const ground = new THREE.Mesh(new THREE.CircleGeometry(700, 48), M(0x9bd66a));
+  ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+  for (let i = 0; i < 16; i++) {
+    const a = i / 16 * Math.PI * 2 + hash(i + 80) * 0.3, r = 210 + hash(i + 90) * 70;
+    const h = add(scene, SPH, i % 2 ? 0x8fd27a : 0x7cc46a, Math.cos(a) * r, -6, Math.sin(a) * r, 55 + hash(i + 7) * 40, 22 + hash(i + 17) * 22, 55 + hash(i + 27) * 40);
+    h.castShadow = false;
+  }
+
+  /* 环道 */
+  const curve = new THREE.CatmullRomCurve3(CTRL.map(([x, z]) => new THREE.Vector3(x, 0, z)), true, 'centripetal');
+  curve.arcLengthDivisions = 800;
+  const len = curve.getLength();
+  const pA = new THREE.Vector3(), tA = new THREE.Vector3();
+  const strip = (o0, o1, y, mat, n = 400, from = 0, to = 1) => {
+    const pos = [], idx = [];
+    for (let i = 0; i <= n; i++) {
+      const u = (((from + (to - from) * i / n) % 1) + 1) % 1;
+      curve.getPointAt(u, pA); curve.getTangentAt(u, tA);
+      const nx = -tA.z, nz = tA.x;
+      pos.push(pA.x + nx * o0, y, pA.z + nz * o0, pA.x + nx * o1, y, pA.z + nz * o1);
+      if (i < n) { const a = i * 2; idx.push(a, a + 1, a + 2, a + 1, a + 3, a + 2); }
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.setIndex(idx); geo.computeVertexNormals();
+    const m = new THREE.Mesh(geo, mat); m.receiveShadow = true; scene.add(m); return m;
+  };
+  strip(-TRACK_W - 0.35, TRACK_W + 0.35, 0.03, decal(0xc99a5b, 1));    // 路沿
+  strip(-TRACK_W, TRACK_W, 0.06, decal(0xe6c48c, 2));                  // 泥土路面
+  const dashMat = decal(0xf6e2bb, 3);
+  for (let i = 0; i < 64; i++) strip(-0.13, 0.13, 0.09, dashMat, 3, (i + 0.3) / 64, (i + 0.7) / 64);
+  const chk = [decal(0xffffff, 4), decal(0x6b4423, 4)], cell = TRACK_W / 4;   // 起点线
+  for (let r = 0; r < 2; r++) for (let c = 0; c < 8; c++)
+    strip(-TRACK_W + c * cell, -TRACK_W + (c + 1) * cell, 0.1, chk[(r + c) % 2], 1, (r - 1) * cell / len, r * cell / len);
+
+  // 起点处的方向（n0 指向赛道外侧）
+  const P0 = curve.getPointAt(0), t0 = curve.getTangentAt(0), n0 = new THREE.Vector3(-t0.z, 0, t0.x);
+  const flagCv = document.createElement('canvas'); flagCv.width = 64; flagCv.height = 40;
+  const fc = flagCv.getContext('2d');
+  for (let y = 0; y < 5; y++) for (let x = 0; x < 8; x++) { fc.fillStyle = (x + y) % 2 ? '#fff' : '#3b2a1a'; fc.fillRect(x * 8, y * 8, 8, 8); }
+  const flagTex = new THREE.CanvasTexture(flagCv); flagTex.colorSpace = THREE.SRGBColorSpace; flagTex.magFilter = THREE.NearestFilter;
+  const flagMat = new THREE.MeshLambertMaterial({ map: flagTex, side: THREE.DoubleSide });
+  const flags = [-1, 1].map(sd => {
+    const o = grp(scene, P0.x + n0.x * sd * (TRACK_W + 0.8), 0, P0.z + n0.z * sd * (TRACK_W + 0.8));
+    add(o, CYL, 0xffffff, 0, 2.3, 0, 0.09, 4.6, 0.09); add(o, SPH, 0xffd95a, 0, 4.7, 0, 0.18);
+    const f = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.05), flagMat); f.position.set(0.9, 3.95, 0); f.castShadow = true;
+    const piv = grp(o); piv.add(f); piv.rotation.y = Math.atan2(-t0.z, t0.x); return piv;
+  });
+
+  /* 池塘 */
+  const disc = (c, layer, x, z, rx, rz, y) => {
+    const m = new THREE.Mesh(new THREE.CircleGeometry(1, 40), decal(c, layer));
+    m.rotation.x = -Math.PI / 2; m.position.set(x, y, z); m.scale.set(rx, rz, 1); m.receiveShadow = true; scene.add(m); return m;
+  };
+  disc(0xe9d9a6, 1, POND.x, POND.z, POND.rx + 0.9, POND.rz + 0.9, 0.03);
+  disc(0x6fcdf0, 2, POND.x, POND.z, POND.rx, POND.rz, 0.06);
+  disc(0xc9f0ff, 3, POND.x - 3, POND.z - 2, 2.6, 1.1, 0.09);
+  [[4, 2.5, 0.9], [-2, 3.5, 0.7], [5.5, -1.5, 0.6]].forEach(([x, z, r]) => disc(0x4caf50, 3, POND.x + x, POND.z + z, r, r, 0.09));
+
+  /* 终点：树洞 / 小窝（位于起点线内侧） */
+  const HOME = new THREE.Vector3(P0.x - n0.x * (TRACK_W + 3.6) + t0.x * 3, 0, P0.z - n0.z * (TRACK_W + 3.6) + t0.z * 3);
+  const homeRot = Math.atan2(n0.x, n0.z);                               // 门朝向赛道
+  const doorMat = new THREE.MeshLambertMaterial({ color: 0x3b2412, emissive: 0x000000 });
+  const hollow = grp(scene, HOME.x, 0, HOME.z); hollow.rotation.y = homeRot;
+  add(hollow, CYL, 0x8d5a2b, 0, 2.7, 0, 1.7, 5.4, 1.7);
+  for (let i = 0; i < 5; i++) { const a = i / 5 * 6.283 + 0.6; add(hollow, CONE, 0x7a4a20, Math.cos(a) * 1.7, 0.6, Math.sin(a) * 1.7, 0.7, 1.6, 0.7); }
+  add(hollow, SPH, 0x43a047, -2, 6.2, 0.3, 2.5); add(hollow, SPH, 0x5dbb63, 2, 6.2, -0.3, 2.5);
+  add(hollow, SPH, 0x4caf50, 0, 7.6, 0, 3.1); add(hollow, SPH, 0x7ed67f, -0.9, 9.3, 0.6, 1.5);
+  add(hollow, SPH, doorMat, 0, 1.55, 1.6, 0.85, 1.2, 0.3);
+  const kennel = grp(scene, HOME.x, 0, HOME.z); kennel.rotation.y = homeRot;
+  add(kennel, BOX, 0xfff1cf, 0, 1.2, 0, 3.3, 2.4, 3.3);
+  const roof = add(kennel, new THREE.ConeGeometry(1, 1, 4), 0xe5534b, 0, 3.3, 0, 3, 1.9, 3); roof.rotation.y = Math.PI / 4;
+  add(kennel, SPH, doorMat, 0, 0.95, 1.6, 0.8, 1.05, 0.14);
+  add(kennel, BOX, 0xd9b87a, 0, 0.06, 0, 3.7, 0.12, 3.7);
+
+  /* 文字标签（Sprite） */
+  const makeLabel = (w, h) => {
+    const c = document.createElement('canvas'); c.width = 384; c.height = 96;
+    const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false, fog: false }));
+    sp.scale.set(w, h, 1); sp.renderOrder = 10; scene.add(sp);
+    sp.setText = (txt, col) => {
+      if (sp.key === txt + col) return; sp.key = txt + col;
+      const x = c.getContext('2d'); x.clearRect(0, 0, 384, 96);
+      x.font = '800 56px -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif'; x.textAlign = 'center'; x.textBaseline = 'middle'; x.lineJoin = 'round';
+      x.strokeStyle = '#fffdf4'; x.lineWidth = 12; x.strokeText(txt, 192, 50); x.fillStyle = col; x.fillText(txt, 192, 50);
+      tex.needsUpdate = true;
+    };
+    return sp;
+  };
+  const homeLabel = makeLabel(8, 2), bang = makeLabel(6, 1.5);
+  bang.setText('!', '#e5534b');
+
+  /* 树、灌木、花 */
+  const samples = []; for (let i = 0; i < 260; i++) { const p = curve.getPointAt(i / 260); samples.push([p.x, p.z]); }
+  const distTrack = (x, z) => { let d = 1e9; for (const [sx, sz] of samples) d = Math.min(d, (x - sx) ** 2 + (z - sz) ** 2); return Math.sqrt(d); };
+  const inPond = (x, z, pad) => ((x - POND.x) / (POND.rx + pad)) ** 2 + ((z - POND.z) / (POND.rz + pad)) ** 2 < 1;
+  const trees = [], maxTrees = isTouch ? 70 : 130;
+  for (let i = 0; i < 1400 && trees.length < maxTrees; i++) {
+    const x = (hash(i + 5) - 0.5) * 300, z = (hash(i + 4000) - 0.5) * 250, d = distTrack(x, z);
+    if (d < TRACK_W + 3.4 || inPond(x, z, 3) || Math.hypot(x - HOME.x, z - HOME.z) < 8) continue;
+    if (d > 40 && hash(i + 777) > 0.4) continue;                        // 近处密、远处疏
+    const o = grp(scene, x, 0, z), pine = hash(i + 3) > 0.55;
+    o.scale.setScalar(0.85 + hash(i + 9) * 0.75 + (d > 40 ? 0.5 : 0)); o.rotation.y = hash(i + 13) * 6.283;
+    add(o, CYL, 0x8d5a2b, 0, 1, 0, 0.28, 2, 0.28);
+    if (pine) [0x2f9e5b, 0x37ab66, 0x43b972].forEach((c, j) => add(o, CONE, c, 0, 2.3 + j * 1.25, 0, 1.7 - j * 0.42, 2.2, 1.7 - j * 0.42));
+    else { add(o, SPH, 0x43a047, -0.8, 3, 0.2, 1.2); add(o, SPH, 0x5dbb63, 0.8, 3, -0.2, 1.2); add(o, SPH, 0x4caf50, 0, 3.9, 0, 1.6); }
+    trees.push({ o, x, z, ph: hash(i + 31) * 6.283 });
+  }
+  for (let i = 0, nb = 0; i < 400 && nb < 40; i++) {
+    const x = (hash(i + 900) - 0.5) * 150, z = (hash(i + 1900) - 0.5) * 110, d = distTrack(x, z);
+    if (d < TRACK_W + 1.4 || d > 16 || inPond(x, z, 1) || Math.hypot(x - HOME.x, z - HOME.z) < 5) continue;
+    const s = 0.5 + hash(i + 50) * 0.5; add(scene, SPH, i % 2 ? 0x5dbb63 : 0x43a047, x, s * 0.55, z, s * 1.2, s * 0.8, s * 1.2); nb++;
+  }
+  const NF = 320, flowers = new THREE.InstancedMesh(SPH, new THREE.MeshLambertMaterial({ color: 0xffffff }), NF);
+  const dummy = new THREE.Object3D(), fcols = [0xffffff, 0xffd1e8, 0xfff3a0, 0xffb3c7].map(c => new THREE.Color(c));
+  for (let i = 0, n = 0; n < NF; i++) {
+    const x = (hash(i + 200) - 0.5) * 170, z = (hash(i + 3000) - 0.5) * 130;
+    if (i < 5000 && (distTrack(x, z) < TRACK_W + 0.7 || inPond(x, z, 0.5))) continue;
+    dummy.position.set(x, 0.2, z); dummy.scale.set(0.2, 0.2, 0.2); dummy.updateMatrix();
+    flowers.setMatrixAt(n, dummy.matrix); flowers.setColorAt(n, fcols[n % 4]); n++;
+  }
+  flowers.receiveShadow = true; scene.add(flowers);
+
+  /* 角色：都以脚底为原点、面朝 +X */
+  const leg = (parent, x, y, z, r, l, col, paw) => {
+    const p = grp(parent, x, y, z); add(p, CYL, col, 0, -l / 2, 0, r, l, r);
+    if (paw) add(p, SPH, col, 0.04, -l + 0.03, 0, r * 1.35, r * 0.8, r * 1.25);
+    return p;
+  };
+  // 小狗
+  const dog = grp(scene); const dI = grp(dog);
+  add(dI, SPH, 0xf2a541, 0, 0.9, 0, 0.95, 0.56, 0.56); add(dI, SPH, 0xffe6b8, 0.08, 0.76, 0, 0.66, 0.42, 0.46);
+  add(dI, CYL, 0xe5534b, 0.66, 1.2, 0, 0.36, 0.13, 0.36).rotation.z = -0.9;
+  const dHead = grp(dI, 0.98, 1.45, 0);
+  add(dHead, SPH, 0xf2a541, 0, 0, 0, 0.5); add(dHead, SPH, 0xffe6b8, 0.4, -0.1, 0, 0.32, 0.24, 0.28);
+  add(dHead, SPH, 0x3b2a1a, 0.7, -0.03, 0, 0.09);
+  add(dHead, SPH, 0x3b2a1a, 0.38, 0.15, 0.24, 0.075); add(dHead, SPH, 0x3b2a1a, 0.38, 0.15, -0.24, 0.075);
+  const dTongue = add(dHead, SPH, 0xff8fa3, 0.5, -0.33, 0, 0.1, 0.17, 0.08);
+  const dEars = [1, -1].map(sd => { const p = grp(dHead, -0.05, 0.3, sd * 0.43); add(p, SPH, 0xb5651d, 0, -0.3, 0, 0.17, 0.38, 0.12); return p; });
+  const dTail = grp(dI, -0.85, 1.1, 0); dTail.rotation.z = 0.7; add(dTail, CYL, 0xf2a541, 0, 0.3, 0, 0.085, 0.6, 0.085); add(dTail, SPH, 0xffe6b8, 0, 0.62, 0, 0.1);
+  const dLegs = [[0.55, 0.28, 0], [0.55, -0.28, 0.6], [-0.55, 0.28, Math.PI], [-0.55, -0.28, Math.PI + 0.6]]
+    .map(([x, z, off]) => ({ p: leg(dI, x, 0.68, z, 0.12, 0.66, z > 0 ? 0xf2a541 : 0xd6862a, true), off }));
+  // 松鼠（叼着骨头）
+  const sq = grp(scene); sq.scale.setScalar(1.3); const sI = grp(sq);
+  add(sI, SPH, 0xc9773a, 0, 0.6, 0, 0.5, 0.42, 0.38); add(sI, SPH, 0xf6dcb8, 0.12, 0.5, 0, 0.34, 0.27, 0.3);
+  add(sI, SPH, 0xc9773a, 0.5, 0.97, 0, 0.33);
+  add(sI, CONE, 0xc9773a, 0.42, 1.32, 0.18, 0.09, 0.24, 0.09); add(sI, CONE, 0xc9773a, 0.42, 1.32, -0.18, 0.09, 0.24, 0.09);
+  add(sI, SPH, 0x3b2a1a, 0.73, 1.04, 0.17, 0.06); add(sI, SPH, 0x3b2a1a, 0.73, 1.04, -0.17, 0.06); add(sI, SPH, 0x3b2a1a, 0.83, 0.95, 0, 0.045);
+  const sTail = grp(sI, -0.42, 0.55, 0); add(sTail, SPH, 0xb5651d, -0.18, 0.55, 0, 0.3, 0.68, 0.3); add(sTail, SPH, 0xd99555, -0.3, 1.15, 0, 0.3);
+  const sLegs = [[0.28, 0.2, 0], [0.28, -0.2, 0.4], [-0.28, 0.2, Math.PI], [-0.28, -0.2, Math.PI + 0.4]].map(([x, z, off]) => ({ p: leg(sI, x, 0.32, z, 0.08, 0.3, 0xa85f2a, true), off }));
+  const bone = grp(sI, 0.88, 0.84, 0); add(bone, CYL, 0xffffff, 0, 0, 0, 0.05, 0.5, 0.05).rotation.x = Math.PI / 2;
+  for (const z of [-0.26, 0.26]) for (const y of [-0.06, 0.06]) add(bone, SPH, 0xffffff, 0, y, z, 0.085);
+  // 大鹅
+  const goose = grp(scene); goose.scale.setScalar(1.15); const gI = grp(goose);
+  add(gI, SPH, 0xffffff, 0, 1.0, 0, 0.82, 0.56, 0.56);
+  add(gI, CONE, 0xffffff, -0.85, 1.2, 0, 0.26, 0.6, 0.2).rotation.z = 1.1;
+  add(gI, CYL, 0xffffff, 0.78, 1.7, 0, 0.14, 1.0, 0.14).rotation.z = -0.35;
+  add(gI, SPH, 0xffffff, 0.97, 2.25, 0, 0.27);
+  const gBeak = [0.05, -0.05].map(y => { const p = grp(gI, 1.17, 2.24 + y, 0); const b = add(p, CONE, 0xf08a24, 0.2, 0, 0, 0.11, 0.42, 0.15); b.rotation.z = -Math.PI / 2; b.scale.set(0.07, 0.42, 0.15); return p; });
+  for (const sd of [1, -1]) {
+    add(gI, SPH, 0x2f3b1f, 1.1, 2.33, sd * 0.2, 0.05);
+    const brow = add(gI, BOX, 0x2f3b1f, 1.1, 2.44, sd * 0.2, 0.22, 0.045, 0.06); brow.rotation.z = -0.5;      // 凶凶的眉毛
+  }
+  const gWings = [1, -1].map(sd => { const p = grp(gI, -0.05, 1.2, sd * 0.42); add(p, SPH, 0xeef2f6, -0.1, 0, sd * 0.4, 0.6, 0.07, 0.42); return { p, sd }; });
+  const gLegs = [1, -1].map((sd, i) => { const p = grp(gI, 0.05, 0.62, sd * 0.2); add(p, CYL, 0xf08a24, 0, -0.3, 0, 0.05, 0.6, 0.05); add(p, BOX, 0xf08a24, 0.1, -0.59, 0, 0.32, 0.05, 0.24); return { p, off: i * Math.PI }; });
+
+  /* 扬尘 */
+  const dust = Array.from({ length: 16 }, () => {
+    const m = new THREE.Mesh(SPH, new THREE.MeshLambertMaterial({ color: 0xfff3d6, transparent: true, opacity: 0, depthWrite: false }));
+    m.visible = false; scene.add(m); return { m, life: 0 };
+  });
+
+  /* 小地图的静态数据 */
+  let x0 = 1e9, x1 = -1e9, z0 = 1e9, z1 = -1e9;
+  for (const [x, z] of samples) { x0 = Math.min(x0, x); x1 = Math.max(x1, x); z0 = Math.min(z0, z); z1 = Math.max(z1, z); }
+  const map = { cv: $('map'), ctx: $('map').getContext('2d'), w: 0, h: 0, x0: x0 - 7, x1: x1 + 7, z0: z0 - 7, z1: z1 + 7, samples, trees: trees.filter(t => distTrack(t.x, t.z) < 30) };
+
+  return { renderer, scene, camera, curve, len, P0, t0, n0, HOME, hollow, kennel, doorMat, homeLabel, bang, trees, clouds, flags, dust, map,
+    dog, dI, dTongue, dEars, dTail, dLegs, sq, sI, sTail, sLegs, goose, gI, gBeak, gWings, gLegs,
+    back: 10, dustT: 0, camPos: new THREE.Vector3(), camTgt: new THREE.Vector3(), tmpP: new THREE.Vector3(), tmpT: new THREE.Vector3() };
+}
+
+function resize() {
+  if (!T3) return;
+  W = cv.clientWidth; H = cv.clientHeight;
+  if (W < 2 || H < 2) return;
+  T3.renderer.setSize(W, H, false);
+  T3.camera.aspect = W / H; T3.camera.fov = W / H < 1 ? 68 : W / H > 1.9 ? 46 : 55; T3.camera.updateProjectionMatrix();
+  const m = T3.map, dpr = Math.min(window.devicePixelRatio || 1, 2);
+  m.w = m.cv.clientWidth; m.h = m.cv.clientHeight; m.dpr = dpr;
+  m.cv.width = Math.round(m.w * dpr); m.cv.height = Math.round(m.h * dpr);
+  const lh = m.w > 130 ? 14 : 0;                                        // 底部留给图例
+  m.s = Math.min(m.w / (m.x1 - m.x0), (m.h - lh) / (m.z1 - m.z0));
+  m.ox = (m.w - (m.x1 - m.x0) * m.s) / 2; m.oy = (m.h - lh - (m.z1 - m.z0) * m.s) / 2;
 }
 window.addEventListener('resize', () => { if (phase !== 'menu') resize(); });
 
-// 赛道位置（字符数）→ 屏幕坐标。0 在最靠近镜头的起点，沿近侧向右、绕远侧返回
-function pt(pos) {
-  const a = pos / g.lapLen * Math.PI * 2, s = Math.sin(a), c = Math.cos(a);
-  return { x: R.cx + R.rx * s, y: R.cy + R.ry * c, sc: 0.62 + 0.19 * (c + 1), dx: R.rx * c, dy: -R.ry * s, near: c >= 0 };
+// 赛道位置（字符数）→ 世界坐标与朝向。0 在起点线，按弧长匀速前进
+function trackAt(pos, outP, outT) {
+  const u = ((pos / g.lapLen) % 1 + 1) % 1;
+  T3.curve.getPointAt(u, outP); if (outT) T3.curve.getTangentAt(u, outT);
+  return outP;
 }
-const circ = (x, y, r, col) => { ctx.fillStyle = col; ctx.beginPath(); ctx.arc(x, y, r, 0, 7); ctx.fill(); };
-const oval = (x, y, a, b, col, rot = 0) => { ctx.fillStyle = col; ctx.beginPath(); ctx.ellipse(x, y, a, b, rot, 0, 7); ctx.fill(); };
-function label(txt, x, y, col, font = '700 14px sans-serif', align = 'center') {
-  ctx.font = font; ctx.textAlign = align; ctx.lineJoin = 'round';
-  ctx.strokeStyle = '#fffdf4'; ctx.lineWidth = 4; ctx.strokeText(txt, x, y);
-  ctx.fillStyle = col; ctx.fillText(txt, x, y);
-}
-function legs(xs, ph, amp, len, col, lw) {
-  ctx.strokeStyle = col; ctx.lineWidth = lw; ctx.lineCap = 'round';
-  xs.forEach((x, i) => {
-    const a = ph + i * Math.PI;
-    ctx.beginPath(); ctx.moveTo(x, -len); ctx.lineTo(x + Math.sin(a) * len * 0.75 * amp, -Math.max(0, Math.cos(a)) * 3 * amp); ctx.stroke();
-  });
-}
-
-function drawTree(x, y, s, pine, sway) {
-  oval(x, y, 13 * s, 4 * s, '#0000001f');
-  ctx.fillStyle = '#8d5a2b'; ctx.fillRect(x - 3 * s, y - 16 * s, 6 * s, 16 * s);
-  if (pine) {
-    for (let j = 0; j < 3; j++) {
-      const by = y - 11 * s - j * 12 * s, hw = (16 - j * 4) * s;
-      ctx.fillStyle = ['#2f9e5b', '#37ab66', '#43b972'][j];
-      ctx.beginPath(); ctx.moveTo(x - hw, by); ctx.lineTo(x + sway * (j + 1) * 0.5, by - 19 * s); ctx.lineTo(x + hw, by); ctx.fill();
-    }
-  } else {
-    circ(x - 9 * s, y - 24 * s, 11 * s, '#43a047'); circ(x + 9 * s, y - 24 * s, 11 * s, '#5dbb63');
-    circ(x + sway, y - 31 * s, 15 * s, '#4caf50'); circ(x - 4 * s + sway, y - 36 * s, 6 * s, '#7ed67f');
-  }
-}
-
-// 以下角色都以脚底为原点、面朝右
-function drawPuppy(ph, amp, t) {
-  ctx.translate(0, -Math.abs(Math.sin(ph)) * 2.5 * amp);
-  legs([-9, 11], ph + Math.PI / 2, amp, 11, '#d6862a', 4.5);                // 远侧腿
-  ctx.strokeStyle = '#f2a541'; ctx.lineWidth = 4.5; ctx.lineCap = 'round';  // 摇尾巴
-  ctx.beginPath(); ctx.moveTo(-15, -20); ctx.quadraticCurveTo(-22, -24, -23 + Math.sin(t * 16) * 3, -32); ctx.stroke();
-  oval(0, -17, 17, 10, '#f2a541'); oval(2, -12.5, 11, 5, '#ffe6b8');
-  legs([-12, 8], ph, amp, 11, '#f2a541', 4.5);                              // 近侧腿
-  ctx.strokeStyle = '#e5534b'; ctx.lineWidth = 3; ctx.beginPath(); ctx.moveTo(11, -25); ctx.lineTo(14, -17); ctx.stroke();  // 项圈
-  circ(18, -28, 9.5, '#f2a541'); oval(26, -25, 6, 4.5, '#ffe6b8');
-  circ(31, -26.5, 2.2, '#3b2a1a'); circ(20.5, -30.5, 1.7, '#3b2a1a');
-  if (amp > 0.3) oval(26, -19.5, 2.2, 3.6 + Math.sin(ph * 2), '#ff8fa3');   // 吐舌头
-  oval(11.5, -27, 4.2, 8.5, '#b5651d', 0.35 + Math.sin(ph) * 0.3 * amp);    // 垂耳
-}
-
-function drawSquirrel(ph, amp, t) {
-  ctx.translate(0, -Math.abs(Math.sin(ph)) * 5 * amp);
-  oval(-13, -22, 7.5, 13, '#b5651d', -0.35 + Math.sin(ph) * 0.12); oval(-13.5, -23, 4, 9, '#d99555', -0.35);  // 大尾巴
-  legs([-5, 6], ph, amp, 6, '#a85f2a', 3.5);
-  oval(0, -11, 10, 7.5, '#c9773a'); oval(2, -8, 6, 3.6, '#f6dcb8');
-  ctx.fillStyle = '#c9773a'; ctx.beginPath(); ctx.moveTo(6, -22); ctx.lineTo(8, -28); ctx.lineTo(11, -22); ctx.fill();   // 耳朵
-  circ(10, -17, 6.2, '#c9773a'); circ(15.5, -16, 1.4, '#3b2a1a'); circ(11.5, -19, 1.4, '#3b2a1a');
-  ctx.strokeStyle = '#b9a58a'; ctx.lineWidth = 5; ctx.lineCap = 'round';    // 叼着的骨头
-  ctx.beginPath(); ctx.moveTo(15, -12.5); ctx.lineTo(25, -12.5); ctx.stroke();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
-  for (const [bx, by] of [[14, -14.5], [14, -10.5], [26, -14.5], [26, -10.5]]) circ(bx, by, 2.3, '#fff');
-}
-
-function drawGoose(ph, amp, t, angry) {
-  ctx.translate(0, -Math.abs(Math.sin(ph)) * 2 * amp);
-  legs([-3, 5], ph, amp, 10, '#f08a24', 3);
-  ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 1.5;
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.moveTo(-14, -20); ctx.lineTo(-25, -27); ctx.lineTo(-13, -12); ctx.fill(); ctx.stroke();  // 尾羽
-  ctx.lineCap = 'round'; ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 9.5; ctx.beginPath(); ctx.moveTo(10, -21); ctx.lineTo(19, -39); ctx.stroke();
-  ctx.strokeStyle = '#fff'; ctx.lineWidth = 7; ctx.stroke();                // 长脖子
-  ctx.strokeStyle = '#c9d1dc'; ctx.lineWidth = 1.5;
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.ellipse(0, -18, 16, 11, 0, 0, 7); ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#eef2f6'; ctx.beginPath(); ctx.ellipse(-3, -20, 11, 6, -0.3 + Math.sin(ph) * 0.55 * amp, 0, 7); ctx.fill(); ctx.stroke();  // 扑翅膀
-  ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(20, -41, 5.8, 0, 7); ctx.fill(); ctx.stroke();
-  const open = 1.5 + (amp ? Math.abs(Math.sin(t * 10)) * 2.5 : 0) + angry * 2;                                           // 嘎嘎叫
-  ctx.fillStyle = '#f08a24';
-  ctx.beginPath(); ctx.moveTo(24, -44); ctx.lineTo(34, -41 - open); ctx.lineTo(25, -40); ctx.fill();
-  ctx.beginPath(); ctx.moveTo(25, -40); ctx.lineTo(33, -39 + open); ctx.lineTo(24, -37.5); ctx.fill();
-  circ(21.5, -42.5, 1.5, '#2f3b1f');
-  ctx.strokeStyle = '#2f3b1f'; ctx.lineWidth = 1.5; ctx.beginPath(); ctx.moveTo(18.5, -46.5); ctx.lineTo(24, -44.5); ctx.stroke();   // 凶凶的眉毛
-}
-
-function drawHome(x, by, hot, t) {
-  if (mode === 'chase') {                                                   // 松鼠的树洞
-    ctx.fillStyle = '#8d5a2b'; ctx.fillRect(x - 20, by - 44, 40, 44);
-    ctx.beginPath(); ctx.moveTo(x - 20, by); ctx.lineTo(x - 30, by + 3); ctx.lineTo(x - 20, by - 12); ctx.moveTo(x + 20, by); ctx.lineTo(x + 30, by + 3); ctx.lineTo(x + 20, by - 12); ctx.fill();
-    ctx.fillStyle = '#7a4a20'; ctx.fillRect(x - 20, by - 44, 6, 44);
-    circ(x - 20, by - 50, 17, '#43a047'); circ(x + 20, by - 50, 17, '#5dbb63'); circ(x, by - 60, 22, '#4caf50'); circ(x - 7, by - 68, 8, '#7ed67f');
-    oval(x + 2, by - 17, 10, 14, hot ? '#ffe27a' : '#3b2412');
-    if (hot) oval(x + 2, by - 17, 6, 9, '#fff6c8');
-  } else {                                                                  // 小狗的小窝
-    ctx.fillStyle = '#fff1cf'; ctx.strokeStyle = '#d9b87a'; ctx.lineWidth = 2;
-    ctx.fillRect(x - 22, by - 30, 44, 30); ctx.strokeRect(x - 22, by - 30, 44, 30);
-    ctx.fillStyle = '#e5534b'; ctx.beginPath(); ctx.moveTo(x - 29, by - 29); ctx.lineTo(x, by - 54); ctx.lineTo(x + 29, by - 29); ctx.fill();
-    ctx.fillStyle = hot ? '#ffe27a' : '#5a3a1c'; ctx.beginPath(); ctx.arc(x, by - 13, 9, Math.PI, 0); ctx.lineTo(x + 9, by); ctx.lineTo(x - 9, by); ctx.fill();
-  }
-  const ly = by - (mode === 'chase' ? 90 : 62) - (hot ? Math.abs(Math.sin(t * 5)) * 4 : 0);
-  label(hot ? (mode === 'chase' ? '树洞开了！' : '快回小窝！') : '起点', x, ly, hot ? '#e5534b' : '#748560');
+function place(obj, pos) {
+  const p = trackAt(pos, T3.tmpP, T3.tmpT);
+  obj.position.set(p.x, 0.06, p.z); obj.rotation.y = Math.atan2(-T3.tmpT.z, T3.tmpT.x);
 }
 
 function draw(t) {
+  if (!T3) return;
   if (cv.clientWidth !== W || cv.clientHeight !== H) resize();
   if (W < 120 || H < 70) return;                                       // 画布尚未布局
   const dt = Math.max(0, Math.min(0.05, t - lastDraw)); lastDraw = t;
-  const { cx, cy, rx, ry, tw, hy } = R, sway = Math.sin(t * 1.3) * 1.5;
-  const running = phase === 'play';
+  const running = phase === 'play', chase = mode === 'chase';
   g.runMe = (g.runMe || 0) + dt * (6 + 18 * g.boost);
-  g.runFoe = (g.runFoe || 0) + dt * (running ? (mode === 'chase' ? 17 : 13) : 0);
+  g.runFoe = (g.runFoe || 0) + dt * (running ? (chase ? 17 : 13) : 0);
+  const upc = T3.len / g.lapLen;                                        // 每个字符对应的世界长度
 
-  ctx.save();
-  if (g.shake > 0.02) ctx.translate((Math.random() - .5) * 8 * g.shake, (Math.random() - .5) * 6 * g.shake);
+  // 小狗
+  place(T3.dog, g.drawMe);
+  let ph = g.runMe, amp = Math.min(1, g.boost * 4);
+  T3.dI.position.y = Math.abs(Math.sin(ph)) * 0.16 * amp; T3.dI.rotation.z = Math.sin(ph * 2) * 0.05 * amp;
+  for (const l of T3.dLegs) l.p.rotation.z = Math.sin(ph + l.off) * 0.95 * amp;
+  T3.dTail.rotation.x = Math.sin(t * 16) * 0.6;
+  T3.dEars.forEach((e, i) => { e.rotation.x = (i ? 1 : -1) * (0.12 + Math.abs(Math.sin(ph)) * 0.55 * amp); });
+  T3.dTongue.visible = amp > 0.3; T3.dTongue.scale.y = 0.17 + Math.sin(ph * 2) * 0.04;
 
-  // 天空、太阳、云
-  const sky = ctx.createLinearGradient(0, 0, 0, hy);
-  sky.addColorStop(0, '#7cc8ff'); sky.addColorStop(1, '#e3f6ff');
-  ctx.fillStyle = sky; ctx.fillRect(-10, -10, W + 20, hy + 20);
-  const sx = W - 78, sy = 44;
-  const glow = ctx.createRadialGradient(sx, sy, 10, sx, sy, 90);
-  glow.addColorStop(0, '#fff6b0cc'); glow.addColorStop(1, '#fff6b000');
-  ctx.fillStyle = glow; ctx.fillRect(sx - 90, sy - 90, 180, 180);
-  ctx.strokeStyle = '#ffd95a99'; ctx.lineWidth = 4; ctx.lineCap = 'round';
-  for (let i = 0; i < 12; i++) {
-    const a = i * Math.PI / 6 + t * 0.25;
-    ctx.beginPath(); ctx.moveTo(sx + Math.cos(a) * 33, sy + Math.sin(a) * 33); ctx.lineTo(sx + Math.cos(a) * 44, sy + Math.sin(a) * 44); ctx.stroke();
+  // 对手
+  T3.sq.visible = chase; T3.goose.visible = !chase;
+  const foe = chase ? T3.sq : T3.goose;
+  place(foe, g.drawFoe);
+  ph = g.runFoe; amp = running ? 1 : 0;
+  if (chase) {
+    T3.sI.position.y = Math.abs(Math.sin(ph)) * 0.38 * amp; T3.sI.rotation.z = Math.sin(ph) * 0.12 * amp;
+    for (const l of T3.sLegs) l.p.rotation.z = Math.sin(ph + l.off) * 0.9 * amp;
+    T3.sTail.rotation.z = Math.sin(ph) * 0.2 * amp;
+  } else {
+    T3.gI.position.y = Math.abs(Math.sin(ph)) * 0.1 * amp; T3.gI.rotation.z = -0.12 * amp - g.surge * 0.15;
+    for (const l of T3.gLegs) l.p.rotation.z = Math.sin(ph + l.off) * 0.8 * amp;
+    const flap = amp ? 0.45 + 0.75 * Math.sin(ph) - g.surge * 0.4 : 1.25;
+    for (const w of T3.gWings) w.p.rotation.x = w.sd * flap;
+    const open = 0.06 + (amp ? Math.abs(Math.sin(t * 10)) * 0.25 : 0) + g.surge * 0.3;    // 嘎嘎叫
+    T3.gBeak[0].rotation.z = open; T3.gBeak[1].rotation.z = -open;
   }
-  circ(sx, sy, 26, '#ffd95a'); circ(sx - 6, sy - 6, 14, '#ffe98a');
-  for (let i = 0; i < 3; i++) {
-    const x = ((i * 370 + 60 + t * (7 + i * 3)) % (W + 240)) - 120, y = 26 + i * 17, s = 0.8 + i * 0.2;
-    ctx.globalAlpha = 0.92;
-    circ(x, y, 14 * s, '#fff'); circ(x + 16 * s, y - 6 * s, 17 * s, '#fff'); circ(x + 34 * s, y, 13 * s, '#fff'); oval(x + 17 * s, y + 6 * s, 30 * s, 8 * s, '#fff');
-    ctx.globalAlpha = 1;
-  }
+  T3.bang.visible = g.surge > 0.3;
+  T3.bang.position.set(foe.position.x, (chase ? 3.2 : 4.4) + g.surge * 0.5, foe.position.z);
 
-  // 远山与草地
-  for (const [off, amp, col] of [[26, 16, '#8fd27a'], [10, 10, '#9bdc74']]) {
-    ctx.fillStyle = col; ctx.beginPath(); ctx.moveTo(-10, hy + 10);
-    for (let x = -10; x <= W + 10; x += 20) ctx.lineTo(x, hy - off - amp * Math.sin(x * 0.009 + off));
-    ctx.lineTo(W + 10, hy + 10); ctx.fill();
-  }
-  const grass = ctx.createLinearGradient(0, hy, 0, H);
-  grass.addColorStop(0, '#a6de6e'); grass.addColorStop(1, '#84cb52');
-  ctx.fillStyle = grass; ctx.fillRect(-10, hy, W + 20, H - hy + 10);
-  for (const f of R.flowers) { circ(f.x, f.y, 2.2, f.c); circ(f.x, f.y, 0.9, '#f5b301'); }
-  for (const b of R.back) drawTree(b.x, b.y, b.s * R.u, b.pine, sway);
-
-  // 泥土环道
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx + tw, ry + tw * K, 0, 0, 7); ctx.ellipse(cx, cy, rx - tw, ry - tw * K, 0, 0, 7);
-  ctx.fillStyle = '#e6c48c'; ctx.fill('evenodd');
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx - tw, ry - tw * K, 0, 0, 7); ctx.fillStyle = '#b4e47c'; ctx.fill();
-  ctx.lineWidth = 2.5; ctx.strokeStyle = '#c99a5b'; ctx.stroke();
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx + tw, ry + tw * K, 0, 0, 7); ctx.stroke();
-  ctx.setLineDash([10, 16]); ctx.strokeStyle = '#f6e2bb'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.ellipse(cx, cy, rx, ry, 0, 0, 7); ctx.stroke(); ctx.setLineDash([]);
-  for (let i = 0; i < 4; i++) {                                         // 起点线
-    ctx.fillStyle = i % 2 ? '#fff' : '#8d5a2b';
-    ctx.fillRect(cx - 4, cy + ry - tw * K + i * tw * K / 2, 8, tw * K / 2);
-  }
-  // 池塘
-  const p = R.pond;
-  oval(p.x, p.y + 2, p.rx + 4, p.ry + 3, '#8fcf5a'); oval(p.x, p.y, p.rx, p.ry, '#7fd3f2');
-  oval(p.x - p.rx * 0.3, p.y - p.ry * 0.3, p.rx * 0.35, p.ry * 0.2, '#c9f0ff');
-  oval(p.x + p.rx * 0.4, p.y + p.ry * 0.3, 7, 3.5, '#5dbb63');
-
-  const ent = e => {
-    const q = e.p, s = q.sc * 1.15 * Math.max(0.72, R.u);
-    oval(q.x, q.y, 20 * q.sc, 5 * q.sc, '#00000030');
-    if (e.me) for (let i = 1; i <= 5 && g.boost > 0.15; i++) {          // 扬起的尘土
-      const d = pt(g.drawMe - 2 - i * 1.3);
-      circ(d.x, d.y - (2 + i * 1.5) * d.sc, (2 + i * 0.9) * d.sc, `rgba(255,246,222,${g.boost * (1 - i / 6) * 0.8})`);
+  // 扬起的尘土
+  T3.dustT -= dt;
+  if (g.boost > 0.15 && T3.dustT <= 0) {
+    const d = T3.dust.find(x => x.life <= 0);
+    if (d) {
+      const p = trackAt(g.drawMe - 1.2 / upc, T3.tmpP);
+      d.life = 1; d.m.visible = true; d.m.position.set(p.x + (Math.random() - 0.5) * 0.8, 0.25, p.z + (Math.random() - 0.5) * 0.8); T3.dustT = 0.05;
     }
-    ctx.save(); ctx.translate(q.x, q.y);
-    ctx.scale(q.dx < 0 ? -1 : 1, 1); ctx.rotate(Math.atan2(q.dy, Math.abs(q.dx)) * 0.35); ctx.scale(s, s);
-    if (e.me) drawPuppy(g.runMe, Math.min(1, g.boost * 4), t);
-    else if (mode === 'chase') drawSquirrel(g.runFoe, running ? 1 : 0, t);
-    else drawGoose(g.runFoe, running ? 1 : 0, t, g.surge);
-    ctx.restore();
-    if (!e.me && g.surge > 0.3) label('!', q.x, q.y - 62 * q.sc, '#e5534b', '900 22px sans-serif');
-  };
-  const ents = [{ p: pt(g.drawMe), me: true }, { p: pt(g.drawFoe), me: false }].sort((a, b) => a.p.y - b.p.y);
-
-  ents.filter(e => !e.p.near).forEach(ent);                             // 远侧 → 会被内场的树挡住
-  for (const tr of R.trees) drawTree(tr.x, tr.y, R.u * tr.s * (0.8 + 0.3 * (tr.y - cy + ry) / (2 * ry)), tr.pine, sway);
+  }
+  for (const d of T3.dust) if (d.life > 0) {
+    d.life -= dt * 2.2; d.m.position.y += dt * 0.9; d.m.scale.setScalar(0.18 + (1 - d.life) * 0.55);
+    d.m.material.opacity = Math.max(0, d.life) * 0.65; if (d.life <= 0) d.m.visible = false;
+  }
 
   // 终点：最后一圈才开启
-  const hot = (mode === 'chase' ? g.foe : mePos()) >= g.goal - g.lapLen;
-  const hu = Math.max(0.62, R.u);
-  ctx.save(); ctx.translate(cx, cy + ry - tw * K - 4); ctx.scale(hu, hu); drawHome(0, 0, hot, t); ctx.restore();
+  const hot = (chase ? g.foe : mePos()) >= g.goal - g.lapLen;
+  T3.hollow.visible = chase; T3.kennel.visible = !chase;
+  T3.doorMat.color.setHex(hot ? 0xffe27a : (chase ? 0x3b2412 : 0x5a3a1c));
+  T3.doorMat.emissive.setHex(hot ? 0xc79a20 : 0x000000);
+  T3.homeLabel.setText(hot ? (chase ? '树洞开了！' : '快回小窝！') : '起点', hot ? '#e5534b' : '#748560');
+  T3.homeLabel.position.set(T3.HOME.x, (chase ? 12 : 6.2) + (hot ? Math.abs(Math.sin(t * 5)) * 0.5 : 0), T3.HOME.z);
 
-  ents.filter(e => e.p.near).forEach(ent);                              // 近侧
+  // 环境小动画
+  for (const tr of T3.trees) tr.o.rotation.z = Math.sin(t * 1.3 + tr.ph) * 0.02;
+  for (const c of T3.clouds) { c.position.x += dt * 2.2; if (c.position.x > 300) c.position.x = -300; }
+  T3.flags.forEach((f, i) => { f.rotation.x = Math.sin(t * 5 + i) * 0.08; });
 
-  // 圈数
-  const lap = Math.min(g.laps, Math.floor(mePos() / g.lapLen) + 1);
-  label(`第 ${lap} / ${g.laps} 圈`, 16, 30, '#2e7d32', '700 17px sans-serif', 'left');
-  if (hot && running) label('最后一圈！', 16, 52, '#e5534b', '700 14px sans-serif', 'left');
-  ctx.restore();
+  // 跟随镜头：沿赛道跟在小狗身后；被大鹅逼近时拉远，把它也收进画面
+  let want = 10;
+  if (!chase) { const gap = (g.drawMe - g.drawFoe) * upc; if (gap < 22) want = Math.max(10, Math.min(28, gap + 11)); }
+  T3.back += (want - T3.back) * (1 - Math.exp(-3 * dt));
+  const cp = T3.camPos, ct = T3.camTgt;
+  trackAt(g.drawMe - T3.back / upc, cp); cp.y = 4.7 + (T3.back - 10) * 0.5;
+  trackAt(g.drawMe + (6 - (T3.back - 10) * 0.3) / upc, ct); ct.y = 1.3;
+  if (phase === 'countdown') {                                          // 倒计时：从全景俯冲到小狗身后
+    const e = smooth(Math.max(0, Math.min(1, 1 - g.cd / 2.4)));
+    cp.set(cp.x * e, 78 * (1 - e) + cp.y * e, 88 * (1 - e) + cp.z * e); ct.multiplyScalar(e);
+  }
+  if (g.shake > 0.02) { cp.x += (Math.random() - 0.5) * 0.5 * g.shake; cp.y += (Math.random() - 0.5) * 0.4 * g.shake; }
+  T3.camera.position.copy(cp); T3.camera.lookAt(ct);
+  T3.renderer.render(T3.scene, T3.camera);
 
-  // 倒计时
-  if (phase === 'countdown') {
-    ctx.fillStyle = '#ffffff8c'; ctx.fillRect(0, 0, W, H);
-    label(Math.ceil(g.cd / 0.8), W / 2, H / 2 + 20, '#2e7d32', '800 84px sans-serif');
-    label(MODES[mode].desc, W / 2, H / 2 + 60, '#4b5a35', (W < 500 ? 12 : 15) + 'px sans-serif');
+  // 圈数、倒计时
+  const lap = Math.min(g.laps, Math.floor(mePos() / g.lapLen) + 1), tag = `第 ${lap} / ${g.laps} 圈` + (hot && running ? ' · 最后一圈！' : '');
+  if ($('lapTag').textContent !== tag) { $('lapTag').textContent = tag; $('lapTag').classList.toggle('hot', hot && running); }
+  const cdOn = phase === 'countdown'; $('cd').classList.toggle('hidden', !cdOn);
+  if (cdOn) { const n = String(Math.ceil(g.cd / 0.8)); if ($('cdNum').textContent !== n) $('cdNum').textContent = n; $('cdDesc').textContent = MODES[mode].desc; }
+
+  drawMap(t);
+}
+
+/* ---------- 小地图（左上角，俯视全图） ---------- */
+function drawMap(t) {
+  const m = T3.map, c = m.ctx, chase = mode === 'chase';
+  if (!m.w) return;
+  const X = x => m.ox + (x - m.x0) * m.s, Y = z => m.oy + (z - m.z0) * m.s;
+  c.setTransform(m.dpr, 0, 0, m.dpr, 0, 0); c.clearRect(0, 0, m.w, m.h);
+  c.fillStyle = '#5a9e4a88'; for (const tr of m.trees) { c.beginPath(); c.arc(X(tr.x), Y(tr.z), 1.5, 0, 7); c.fill(); }
+  c.fillStyle = '#6fcdf0'; c.beginPath(); c.ellipse(X(POND.x), Y(POND.z), POND.rx * m.s, POND.rz * m.s, 0, 0, 7); c.fill();
+  c.beginPath(); m.samples.forEach(([x, z], i) => i ? c.lineTo(X(x), Y(z)) : c.moveTo(X(x), Y(z))); c.closePath();
+  c.lineJoin = 'round'; c.strokeStyle = '#a97a3f'; c.lineWidth = TRACK_W * 2 * m.s + 3; c.stroke();
+  c.strokeStyle = '#f0d6a4'; c.lineWidth = TRACK_W * 2 * m.s + 0.5; c.stroke();
+  // 起点线与终点
+  const { P0, n0, HOME } = T3, hw = TRACK_W + 1.2;
+  c.strokeStyle = '#3b2a1a'; c.lineWidth = 2; c.setLineDash([2, 2]);
+  c.beginPath(); c.moveTo(X(P0.x - n0.x * hw), Y(P0.z - n0.z * hw)); c.lineTo(X(P0.x + n0.x * hw), Y(P0.z + n0.z * hw)); c.stroke(); c.setLineDash([]);
+  const hot = (chase ? g.foe : mePos()) >= g.goal - g.lapLen;
+  c.font = (hot ? 13 + Math.sin(t * 8) * 2 : 11) + 'px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+  c.fillText(chase ? '🌳' : '🏠', X(HOME.x), Y(HOME.z) - 3);
+  // 追赶者 / 被追赶者
+  const dot = (pos, col, r, pulse) => {
+    const p = trackAt(pos, T3.tmpP, T3.tmpT), x = X(p.x), y = Y(p.z), a = Math.atan2(T3.tmpT.z, T3.tmpT.x);
+    if (pulse > 0.05) { c.strokeStyle = col; c.globalAlpha = pulse; c.lineWidth = 2; c.beginPath(); c.arc(x, y, r + 3 + (1 - pulse) * 9, 0, 7); c.stroke(); c.globalAlpha = 1; }
+    c.fillStyle = col; c.beginPath(); c.moveTo(x + Math.cos(a) * (r + 5), y + Math.sin(a) * (r + 5));       // 朝向小箭头
+    c.lineTo(x + Math.cos(a + 1.9) * r, y + Math.sin(a + 1.9) * r); c.lineTo(x + Math.cos(a - 1.9) * r, y + Math.sin(a - 1.9) * r); c.fill();
+    c.beginPath(); c.arc(x, y, r, 0, 7); c.fill(); c.strokeStyle = '#fff'; c.lineWidth = 2; c.stroke();
+  };
+  dot(g.drawFoe, '#e5534b', 4.5, Math.max(g.surge, 0.5 + 0.5 * Math.sin(t * 6)) * (phase === 'play' ? 0.8 : 0));
+  dot(g.drawMe, '#f08a24', 5, 0);
+  // 图例
+  if (m.w > 130) {
+    c.font = '600 10px -apple-system, "PingFang SC", sans-serif'; c.textAlign = 'left';
+    const leg = [['#f08a24', '小狗'], ['#e5534b', chase ? '松鼠' : '大鹅']];
+    leg.forEach(([col, name], i) => {
+      const x = 10 + i * 44, y = m.h - 10;
+      c.fillStyle = col; c.beginPath(); c.arc(x, y, 3.5, 0, 7); c.fill();
+      c.lineWidth = 3; c.strokeStyle = '#ffffffcc'; c.strokeText(name, x + 6, y + 0.5); c.fillStyle = '#2f3b1f'; c.fillText(name, x + 6, y + 0.5);
+    });
   }
 }
 

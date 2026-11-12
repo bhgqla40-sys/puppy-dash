@@ -146,7 +146,7 @@
         <button class="btn ghost" id="soundBtn">音效：开</button>
         <span class="best" id="bestLine"></span>
       </div>
-      <p class="hint" style="margin:14px 0 0">请先切换到英文输入法。打错时对手会趁机前冲，按 Esc（手机上点右上角 ✕）可随时返回菜单。</p>
+      <p class="hint" style="margin:14px 0 0">请先切换到英文输入法，字母不区分大小写。打错时对手会趁机前冲，按 Esc（手机上点右上角 ✕）可随时返回菜单。</p>
       <p class="hint" id="err3d" style="margin:8px 0 0;color:var(--foe)"></p>
     </div>
   </section>
@@ -203,11 +203,11 @@ const MODES = {
   escape: { name: '逃脱', desc: '不小心惹到了大鹅！在被它追上之前跑回小窝。', speedMul: 1.15 },
 };
 const DIFFS = {
-  easy:   { name: '简单', wpm: 15, penalty: 0, caseFree: true,  tier: 'easy',   desc: '对手 15 WPM · 短句 · 不区分大小写 · 打错无惩罚' },
-  normal: { name: '普通', wpm: 30, penalty: 1, caseFree: false, tier: 'normal', desc: '对手 30 WPM · 完整段落 · 打错对手前冲 1 格' },
-  hard:   { name: '困难', wpm: 50, penalty: 2, caseFree: false, tier: 'hard',   desc: '对手 50 WPM · 含数字与符号 · 打错对手前冲 2 格' },
-  hell:   { name: '地狱', wpm: 75, penalty: 3, caseFree: false, tier: 'hard',   desc: '对手 75 WPM · 含数字与符号 · 打错对手前冲 3 格' },
-  custom: { name: '自定义', wpm: 40, penalty: 1, caseFree: false, tier: 'normal', desc: '自己设定对手速度（10–120 WPM）' },
+  easy:   { name: '简单', wpm: 15, penalty: 0, tier: 'easy',   desc: '对手 15 WPM · 短句 · 打错无惩罚' },
+  normal: { name: '普通', wpm: 30, penalty: 1, tier: 'normal', desc: '对手 30 WPM · 完整段落 · 打错对手前冲 1 格' },
+  hard:   { name: '困难', wpm: 50, penalty: 2, tier: 'hard',   desc: '对手 50 WPM · 含数字与符号 · 打错对手前冲 2 格' },
+  hell:   { name: '地狱', wpm: 75, penalty: 3, tier: 'hard',   desc: '对手 75 WPM · 含数字与符号 · 打错对手前冲 3 格' },
+  custom: { name: '自定义', wpm: 40, penalty: 1, tier: 'normal', desc: '自己设定对手速度（10–120 WPM）' },
 };
 const TEXTS = {
   easy: [
@@ -412,7 +412,7 @@ function typeChar(ch) {
   if (phase !== 'play') return;
   $('ime').textContent = '';
   const want = g.text[g.idx];
-  const ok = g.d.caseFree ? ch.toLowerCase() === want.toLowerCase() : ch === want;
+  const ok = ch.toLowerCase() === want.toLowerCase();          // 所有难度都不区分大小写
   const cur = spans[g.idx];
   if (ok) {
     cur.className = 'done'; g.idx++; g.boost = Math.min(1, g.boost + 0.22);
